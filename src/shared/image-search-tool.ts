@@ -3,7 +3,7 @@ import { normalizeSearchEngines } from './web-search-tool'
 
 export const IMAGE_SEARCH_TOOLSET_INSTRUCTION = `
 ## image_search
-Use image_search when the user asks to find, show, locate, or recommend existing images from the web. In the final answer, place each chosen result's Image URL exactly where that image belongs, preferably as a standalone URL on its own line. The app replaces matching, accessibility-checked URLs with inline images in the same positions. In reasoning or intermediate narration, mention raw image URLs instead of embedding images. Set showInReasoning=true only when the user explicitly asks to see images inside the reasoning/process area. Briefly describe useful results and use each result's Source URL when attribution or further context is helpful. When a loaded search skill specifies a SearXNG engine whitelist, pass it through the engines array exactly as instructed. Never invent an image URL.
+When the user explicitly asks to find, show, locate, compare, or recommend existing images from the web, you MUST call image_search. Do not substitute web_search for an explicit image request. In the final answer, place each chosen result's Image URL exactly where that image belongs, preferably as a standalone URL on its own line. The app replaces matching, accessibility-checked URLs with inline images in the same positions and automatically shows any valid results you omit. In reasoning or intermediate narration, mention raw image URLs instead of embedding images. Set showInReasoning=true only when the user explicitly asks to see images inside the reasoning/process area. Briefly describe useful results and use each result's Source URL when attribution or further context is helpful. When a loaded search skill specifies a SearXNG engine whitelist, pass it through the engines array exactly as instructed. Never invent an image URL.
 `
 
 export interface ImageSearchResultItem {
@@ -50,7 +50,7 @@ export function createImageSearchTool(
 ): ToolSet[string] {
   return {
     description:
-      'Search the web for existing images. Results are accessibility-checked; matching final-answer URLs render as inline images in place. Keep reasoning to raw URLs and never fabricate image URLs.',
+      'Search the web for existing images. You must use this tool for explicit image-search requests instead of web_search. Results are accessibility-checked; matching final-answer URLs render as inline images in place and omitted valid results are shown automatically. Keep reasoning to raw URLs and never fabricate image URLs.',
     inputSchema: jsonSchema({
       type: 'object',
       properties: {

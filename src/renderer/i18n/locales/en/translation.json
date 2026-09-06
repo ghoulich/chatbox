@@ -1528,5 +1528,19 @@
   "Split conversation attachments into searchable chunks. The configured embedding model builds and searches the index; the configured reranking model refines matching chunks.": "Split conversation attachments into searchable chunks. The configured embedding model builds and searches the index; the configured reranking model refines matching chunks.",
   "Send the full parsed attachment text directly to the chat model without embedding or reranking.": "Send the full parsed attachment text directly to the chat model without embedding or reranking.",
   "Automatically use embedding retrieval for supported large attachments on every platform; otherwise send the full parsed text inline.": "Automatically use embedding retrieval for supported large attachments on every platform; otherwise send the full parsed text inline.",
-  "Embedding retrieval requires a configured embedding model or an active Chatbox AI license.": "Embedding retrieval requires a configured embedding model or an active Chatbox AI license."
+  "Embedding retrieval requires a configured embedding model or an active Chatbox AI license.": "Embedding retrieval requires a configured embedding model or an active Chatbox AI license.",
+  "Webpage Reader": "Webpage Reader",
+  "Choose where parse_link reads webpages. Search remains handled by the selected search provider.": "Choose where parse_link reads webpages. Search remains handled by the selected search provider.",
+  "Native (this device)": "Native (this device)",
+  "Webpage reading is performed by Firecrawl; this device connects only to the configured Firecrawl endpoint.": "Webpage reading is performed by Firecrawl; this device connects only to the configured Firecrawl endpoint.",
+  "Firecrawl Endpoint": "Firecrawl Endpoint",
+  "Enter a server base URL or a full /v1/scrape or /v2/scrape endpoint.": "Enter a server base URL or a full /v1/scrape or /v2/scrape endpoint.",
+  "Firecrawl Bearer Token (optional)": "Firecrawl Bearer Token (optional)",
+  "Required only when authentication is enabled on your Firecrawl deployment.": "Required only when authentication is enabled on your Firecrawl deployment.",
+  "Request Timeout": "Request Timeout",
+  "{{seconds}} seconds": "{{seconds}} seconds",
+  "Fallback to native webpage reading": "Fallback to native webpage reading",
+  "When disabled, this device will not access the target webpage directly if Firecrawl fails.": "When disabled, this device will not access the target webpage directly if Firecrawl fails.",
+  "The connection check asks Firecrawl to scrape https://example.com.": "The connection check asks Firecrawl to scrape https://example.com.",
+  "Unable to connect to Firecrawl.": "Unable to connect to Firecrawl."
 }

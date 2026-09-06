@@ -23,6 +23,33 @@
   margin-inline: auto;
 }
 
+.mermaid-diagram-container svg .node rect,
+.mermaid-diagram-container svg .node polygon,
+.mermaid-diagram-container svg .node path,
+.mermaid-diagram-container svg .actor,
+.mermaid-diagram-container svg .cluster rect {
+  stroke-width: 1.5px !important;
+  filter: drop-shadow(0 3px 7px rgb(15 23 42 / 0.14));
+}
+
+.mermaid-diagram-container svg .node rect,
+.mermaid-diagram-container svg .actor,
+.mermaid-diagram-container svg .cluster rect {
+  rx: 10px;
+  ry: 10px;
+}
+
+.mermaid-diagram-container svg .edgePath path,
+.mermaid-diagram-container svg .flowchart-link {
+  stroke-width: 1.7px !important;
+}
+
+.mermaid-diagram-container svg text,
+.mermaid-diagram-container svg .label {
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
 :root {
   /* radius */
   --chatbox-radius-none: 0rem;

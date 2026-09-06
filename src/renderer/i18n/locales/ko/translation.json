@@ -1485,5 +1485,19 @@
   "Split conversation attachments into searchable chunks. The configured embedding model builds and searches the index; the configured reranking model refines matching chunks.": "대화 첨부 파일을 검색 가능한 청크로 나눕니다. 설정된 임베딩 모델이 인덱스를 만들고 검색하며, 재순위 모델이 일치 결과를 개선합니다.",
   "Send the full parsed attachment text directly to the chat model without embedding or reranking.": "분석된 첨부 파일 전체 텍스트를 임베딩이나 재순위 없이 채팅 모델에 직접 보냅니다.",
   "Automatically use embedding retrieval for supported large attachments on every platform; otherwise send the full parsed text inline.": "모든 플랫폼에서 지원되는 대용량 첨부 파일에는 임베딩 검색을 자동으로 사용하고, 그 외에는 분석된 전체 텍스트를 인라인으로 전송합니다.",
-  "Embedding retrieval requires a configured embedding model or an active Chatbox AI license.": "임베딩 검색에는 설정된 임베딩 모델이나 활성 Chatbox AI 라이선스가 필요합니다."
+  "Embedding retrieval requires a configured embedding model or an active Chatbox AI license.": "임베딩 검색에는 설정된 임베딩 모델이나 활성 Chatbox AI 라이선스가 필요합니다.",
+  "Webpage Reader": "웹페이지 리더",
+  "Choose where parse_link reads webpages. Search remains handled by the selected search provider.": "parse_link가 웹페이지를 읽을 서비스를 선택합니다. 검색은 선택한 검색 제공자가 계속 처리합니다.",
+  "Native (this device)": "기본 방식(이 기기)",
+  "Webpage reading is performed by Firecrawl; this device connects only to the configured Firecrawl endpoint.": "웹페이지 읽기는 Firecrawl이 수행하며 이 기기는 설정된 Firecrawl 엔드포인트에만 연결합니다.",
+  "Firecrawl Endpoint": "Firecrawl 엔드포인트",
+  "Enter a server base URL or a full /v1/scrape or /v2/scrape endpoint.": "서버 기본 URL 또는 전체 /v1/scrape, /v2/scrape 엔드포인트를 입력하세요.",
+  "Firecrawl Bearer Token (optional)": "Firecrawl Bearer Token(선택 사항)",
+  "Required only when authentication is enabled on your Firecrawl deployment.": "Firecrawl 배포에서 인증을 활성화한 경우에만 필요합니다.",
+  "Request Timeout": "요청 시간 제한",
+  "{{seconds}} seconds": "{{seconds}}초",
+  "Fallback to native webpage reading": "기본 웹페이지 읽기로 대체",
+  "When disabled, this device will not access the target webpage directly if Firecrawl fails.": "비활성화하면 Firecrawl이 실패해도 이 기기가 대상 웹페이지에 직접 접근하지 않습니다.",
+  "The connection check asks Firecrawl to scrape https://example.com.": "연결 확인 시 Firecrawl에 https://example.com 수집을 요청합니다.",
+  "Unable to connect to Firecrawl.": "Firecrawl에 연결할 수 없습니다."
 }

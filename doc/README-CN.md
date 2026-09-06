@@ -12,19 +12,25 @@
 ## ghoulich Android 二开版
 
 本 fork 以官方 Chatbox `v1.23.1` 为基线，当前二开版本为
-`1.23.1.491`。在保留上游桌面端和 Web 代码的同时，Android 端增加：
+`1.23.1.492`。在保留上游桌面端和 Web 代码的同时，Android 端增加：
 
 - 通过 Android SAF 只读扫描 Skills，在对话中调用 `load_skill`，并在
   Android 对话模式中启用 Skills 与远程 HTTP/SSE MCP；
-- 支持认证和引擎选择的 SearXNG 网页、图片、视频搜索，回答中直接显示
-  图片及视频缩略图，并区分应用内可播放视频与只能打开网页的视频；
+- 支持认证和引擎选择的 SearXNG 网页、图片、视频搜索；明确的图片请求会
+  强制路由到图片搜索，即使模型遗漏或改写媒体地址，也会通过兜底图库/卡片
+  保留图片预览和来源链接；视频缩略图会区分应用内可播放视频与只能打开网页
+  的视频；
+- 网页读取可选择 Chatbox 原生 `parse_link` 或自托管 Firecrawl；Firecrawl
+  支持可选 Bearer Token、受限超时、Android 原生 HTTP 传输，并提供默认关闭
+  的原生读取回退开关；
 - 新会话 Soul/人格注入，以及不会覆盖用户手动命名的搭档会话自动标题；
 - DNS、Ping、TCP、HTTP/TLS、Wi-Fi/LAN、限流测速、SSH 和只读 SNMP 等
   Android 本地网络诊断，敏感凭据不会出现在模型可见的工具结果中；
 - 前台服务辅助的后台生成、隐私通知、受限 wake lock，以及后台开关触发的
   Settings Store 崩溃修复；
-- 响应式 Mermaid 图表与沙箱化 Three.js 教学动图，支持真全屏、触摸旋转/
-  平移/双指缩放、离线 KaTeX 字体、生命周期清理和精确安全规则；
+- Mermaid 图表支持自适应明暗模式的现代主题、语义配色、优化间距与精致容器；
+  沙箱化 Three.js 教学动图支持真全屏、触摸旋转/平移/双指缩放、离线 KaTeX
+  字体、生命周期清理和精确安全规则；
 - 会话附件可选择内联全文或嵌入检索及重排；自动模式统一按文件类型和大小
   决策；移动索引支持批次退避重试、持久化检查点和断点续传；
 - Android 文档导出、用户 CA（仍校验主机名）、移动界面修复，以及全部二开
@@ -35,7 +41,15 @@
 已验证壳组装 APK。签名证书、口令、APK、私人模型/搜索配置和应用数据库不会
 提交到仓库。实现说明见 [`custom/android/README.md`](../custom/android/README.md)，
 最新设备测试见
-[`test-evidence/mumu-v491/TEST_REPORT.md`](../test-evidence/mumu-v491/TEST_REPORT.md)。
+[`test-evidence/mumu-v492/TEST_REPORT.md`](../test-evidence/mumu-v492/TEST_REPORT.md)。
+
+### Firecrawl 配置
+
+打开“**设置 → 联网搜索 → 网页读取器**”，选择 **Firecrawl**，填写自托管
+服务的基础地址（例如 `https://firecrawl.example.com`）。仅在服务需要鉴权时
+填写 Bearer Token，选择超时时间后点击“**检查连接**”发起一次真实抓取测试。
+只有在允许 Firecrawl 失败后由 Android 设备直接读取目标网页时，才启用
+“**失败时回退到原生读取**”；保持关闭可确保网页读取流量不回退到手机端。
 
 ### 下载电脑端
 

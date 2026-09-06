@@ -10,6 +10,7 @@ const getParseLinkProviderMock = vi.fn()
 const webSearchExecutorMock = vi.fn()
 const imageSearchExecutorMock = vi.fn()
 const videoSearchExecutorMock = vi.fn()
+const readWebpageWithFirecrawlMock = vi.fn()
 
 vi.mock('@/stores/settingActions', () => ({
   getLicenseKey: () => getLicenseKeyMock(),
@@ -32,6 +33,10 @@ vi.mock('@/packages/web-search', () => ({
   webSearchExecutor: (...args: unknown[]) => webSearchExecutorMock(...args),
   imageSearchExecutor: (...args: unknown[]) => imageSearchExecutorMock(...args),
   videoSearchExecutor: (...args: unknown[]) => videoSearchExecutorMock(...args),
+}))
+
+vi.mock('@/packages/web-search/firecrawl', () => ({
+  readWebpageWithFirecrawl: (...args: unknown[]) => readWebpageWithFirecrawlMock(...args),
 }))
 
 // Import after mocks are registered
@@ -211,6 +216,7 @@ describe('parseLinkTool', () => {
     parseUserLinkFreeMock.mockReset()
     getStoreBlobMock.mockReset()
     getParseLinkProviderMock.mockReset()
+    readWebpageWithFirecrawlMock.mockReset()
   })
 
   afterEach(() => {
@@ -408,6 +414,80 @@ describe('parseLinkTool', () => {
       expect(result.content.length).toBe(5_000)
       expect(result.originalLength).toBe(15_000)
       expect(result.truncated).toBe(true)
+    })
+  })
+
+  describe('Firecrawl reader', () => {
+    it('routes parse_link through Firecrawl without contacting the native provider', async () => {
+      getExtensionSettingsMock.mockReturnValue({
+        webSearch: {
+          provider: 'searxng',
+          webpageReader: 'firecrawl',
+          firecrawlEndpoint: 'http://192.168.1.10:3002',
+          firecrawlBearerToken: 'token',
+          firecrawlTimeoutSeconds: 90,
+          firecrawlFallbackToNative: false,
+        },
+      })
+      readWebpageWithFirecrawlMock.mockResolvedValue({
+        url: 'https://example.com/article',
+        title: 'Firecrawl title',
+        content: 'Firecrawl content.',
+      })
+      const controller = new AbortController()
+
+      const result = await execParseLink({ url: 'https://example.com/article' }, controller.signal)
+
+      expect(readWebpageWithFirecrawlMock).toHaveBeenCalledWith(
+        'https://example.com/article',
+        {
+          endpoint: 'http://192.168.1.10:3002',
+          bearerToken: 'token',
+          timeoutSeconds: 90,
+        },
+        controller.signal
+      )
+      expect(getParseLinkProviderMock).not.toHaveBeenCalled()
+      expect(result).toMatchObject({ title: 'Firecrawl title', content: 'Firecrawl content.' })
+    })
+
+    it('does not access the target natively after a Firecrawl failure unless fallback is enabled', async () => {
+      readWebpageWithFirecrawlMock.mockRejectedValue(new Error('Firecrawl unavailable'))
+      getExtensionSettingsMock.mockReturnValue({
+        webSearch: {
+          provider: 'searxng',
+          webpageReader: 'firecrawl',
+          firecrawlEndpoint: 'https://crawl.example.com',
+          firecrawlFallbackToNative: false,
+        },
+      })
+
+      await expect(execParseLink({ url: 'https://example.com/article' })).rejects.toThrow('Firecrawl unavailable')
+      expect(getParseLinkProviderMock).not.toHaveBeenCalled()
+    })
+
+    it('uses the provider reader only when Firecrawl fallback is enabled', async () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {})
+      readWebpageWithFirecrawlMock.mockRejectedValue(new Error('Firecrawl unavailable'))
+      getExtensionSettingsMock.mockReturnValue({
+        webSearch: {
+          provider: 'searxng',
+          webpageReader: 'firecrawl',
+          firecrawlEndpoint: 'https://crawl.example.com',
+          firecrawlFallbackToNative: true,
+        },
+      })
+      const nativeParseLink = vi.fn().mockResolvedValue({
+        url: 'https://example.com/article',
+        title: 'Native title',
+        content: 'Native content.',
+      })
+      getParseLinkProviderMock.mockReturnValue({ parseLink: nativeParseLink })
+
+      await expect(execParseLink({ url: 'https://example.com/article' })).resolves.toMatchObject({
+        title: 'Native title',
+      })
+      expect(nativeParseLink).toHaveBeenCalled()
     })
   })
 })

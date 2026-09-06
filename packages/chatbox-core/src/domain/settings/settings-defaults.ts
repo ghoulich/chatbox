@@ -95,6 +95,11 @@ export function createDefaultSettings(): Settings {
         searxngBearerToken: '',
         searxngMaxResults: 10,
         searxngSafeSearch: 1,
+        webpageReader: 'native',
+        firecrawlEndpoint: '',
+        firecrawlBearerToken: '',
+        firecrawlTimeoutSeconds: 60,
+        firecrawlFallbackToNative: false,
       },
       knowledgeBase: {
         models: {

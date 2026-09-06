@@ -1528,5 +1528,19 @@
   "Split conversation attachments into searchable chunks. The configured embedding model builds and searches the index; the configured reranking model refines matching chunks.": "将会话附件切分为可搜索的片段。使用已配置的嵌入模型建立并搜索索引，再使用已配置的重排序模型优化匹配结果。",
   "Send the full parsed attachment text directly to the chat model without embedding or reranking.": "将解析后的附件全文直接发送给对话模型，不使用嵌入或重排序。",
   "Automatically use embedding retrieval for supported large attachments on every platform; otherwise send the full parsed text inline.": "在所有平台上，对支持的大型附件自动使用嵌入检索；其他附件则以内联全文方式发送解析后的完整文本。",
-  "Embedding retrieval requires a configured embedding model or an active Chatbox AI license.": "嵌入检索需要配置嵌入模型，或使用有效的 Chatbox AI 许可证。"
+  "Embedding retrieval requires a configured embedding model or an active Chatbox AI license.": "嵌入检索需要配置嵌入模型，或使用有效的 Chatbox AI 许可证。",
+  "Webpage Reader": "网页读取器",
+  "Choose where parse_link reads webpages. Search remains handled by the selected search provider.": "选择由哪个服务执行 parse_link 网页读取；搜索仍由所选搜索工具处理。",
+  "Native (this device)": "原生（此设备）",
+  "Webpage reading is performed by Firecrawl; this device connects only to the configured Firecrawl endpoint.": "网页读取由 Firecrawl 执行；此设备只连接已配置的 Firecrawl 端点。",
+  "Firecrawl Endpoint": "Firecrawl 端点",
+  "Enter a server base URL or a full /v1/scrape or /v2/scrape endpoint.": "输入服务器根地址，或完整的 /v1/scrape、/v2/scrape 端点。",
+  "Firecrawl Bearer Token (optional)": "Firecrawl Bearer Token（可选）",
+  "Required only when authentication is enabled on your Firecrawl deployment.": "仅当你的 Firecrawl 部署启用了身份验证时才需要填写。",
+  "Request Timeout": "请求超时",
+  "{{seconds}} seconds": "{{seconds}} 秒",
+  "Fallback to native webpage reading": "失败时回退到本机网页读取",
+  "When disabled, this device will not access the target webpage directly if Firecrawl fails.": "关闭后，即使 Firecrawl 失败，此设备也不会直接访问目标网页。",
+  "The connection check asks Firecrawl to scrape https://example.com.": "连接检查会让 Firecrawl 抓取 https://example.com。",
+  "Unable to connect to Firecrawl.": "无法连接到 Firecrawl。"
 }

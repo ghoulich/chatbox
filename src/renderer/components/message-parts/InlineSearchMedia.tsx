@@ -1,7 +1,7 @@
 import { Modal } from '@mantine/core'
 import type { ImageSearchResultItem } from '@shared/image-search-tool'
 import type { VideoSearchResultItem } from '@shared/video-search-tool'
-import { IconExternalLink, IconPlayerPlayFilled, IconWorld } from '@tabler/icons-react'
+import { IconExternalLink, IconPhotoOff, IconPlayerPlayFilled, IconWorld } from '@tabler/icons-react'
 import { type FC, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ImageViewerItem } from '@/components/ImageViewer'
@@ -66,15 +66,27 @@ function parseResolution(resolution: string): { width: number; height: number } 
 }
 
 export const InlineImageSearchResult: FC<{ result: ImageSearchResultItem }> = ({ result }) => {
+  const { t } = useTranslation()
   const [displayUrl, setDisplayUrl] = useState(result.imageUrl)
   const [failed, setFailed] = useState(false)
   const size = parseResolution(result.resolution)
 
   if (failed) {
     return (
-      <a href={result.imageUrl} target="_blank" rel="noreferrer" className="break-all">
-        {result.imageUrl}
-      </a>
+      <span className="my-3 flex max-w-2xl items-center gap-3 rounded-lg border border-chatbox-border-primary bg-chatbox-background-secondary p-3">
+        <IconPhotoOff size={28} className="shrink-0 text-chatbox-tint-secondary" />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-semibold text-chatbox-tint-primary">{result.title}</span>
+          <span className="block text-xs text-chatbox-tint-secondary">{t('Image unavailable')}</span>
+        </span>
+        <button
+          type="button"
+          className="shrink-0 cursor-pointer border-0 bg-transparent p-0 text-xs text-chatbox-tint-brand"
+          onClick={() => void platform.openLink(result.sourceUrl)}
+        >
+          {t('Open source')}
+        </button>
+      </span>
     )
   }
 

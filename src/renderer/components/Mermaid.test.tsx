@@ -70,7 +70,17 @@ describe('MessageMermaid', () => {
 
     expect(await screen.findByText('structuredClone is not a function')).toBeTruthy()
     expect(document.querySelector('code')?.textContent).toBe(source)
-    expect(mocks.initialize).toHaveBeenCalledWith({ theme: 'default', suppressErrorRendering: true })
+    expect(mocks.initialize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        theme: 'base',
+        suppressErrorRendering: true,
+        themeVariables: expect.objectContaining({
+          primaryColor: '#EEF6FF',
+          primaryBorderColor: '#0284C7',
+        }),
+        flowchart: expect.objectContaining({ curve: 'basis' }),
+      })
+    )
     expect(mocks.trackJkAutoEvent).toHaveBeenCalledWith(JK_EVENTS.MERMAID_RENDER_FAILED, {
       pageName: JK_PAGE_NAMES.CHAT_PAGE,
       content: source,

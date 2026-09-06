@@ -1485,5 +1485,19 @@
   "Split conversation attachments into searchable chunks. The configured embedding model builds and searches the index; the configured reranking model refines matching chunks.": "Teilt Chat-Anhänge in durchsuchbare Abschnitte. Das konfigurierte Embedding-Modell erstellt und durchsucht den Index; das Reranking-Modell verbessert die Treffer.",
   "Send the full parsed attachment text directly to the chat model without embedding or reranking.": "Sendet den vollständig analysierten Anhang direkt an das Chatmodell, ohne Embedding oder Reranking.",
   "Automatically use embedding retrieval for supported large attachments on every platform; otherwise send the full parsed text inline.": "Verwendet auf allen Plattformen automatisch die Embedding-Suche für unterstützte große Anhänge; andernfalls wird der vollständig analysierte Text direkt gesendet.",
-  "Embedding retrieval requires a configured embedding model or an active Chatbox AI license.": "Die Embedding-Suche erfordert ein konfiguriertes Embedding-Modell oder eine aktive Chatbox-AI-Lizenz."
+  "Embedding retrieval requires a configured embedding model or an active Chatbox AI license.": "Die Embedding-Suche erfordert ein konfiguriertes Embedding-Modell oder eine aktive Chatbox-AI-Lizenz.",
+  "Webpage Reader": "Webseitenleser",
+  "Choose where parse_link reads webpages. Search remains handled by the selected search provider.": "Wählen Sie, wo parse_link Webseiten liest. Die Suche bleibt beim ausgewählten Suchanbieter.",
+  "Native (this device)": "Nativ (dieses Gerät)",
+  "Webpage reading is performed by Firecrawl; this device connects only to the configured Firecrawl endpoint.": "Firecrawl liest die Webseiten; dieses Gerät verbindet sich nur mit dem konfigurierten Firecrawl-Endpunkt.",
+  "Firecrawl Endpoint": "Firecrawl-Endpunkt",
+  "Enter a server base URL or a full /v1/scrape or /v2/scrape endpoint.": "Geben Sie eine Server-Basis-URL oder einen vollständigen /v1/scrape- bzw. /v2/scrape-Endpunkt ein.",
+  "Firecrawl Bearer Token (optional)": "Firecrawl Bearer Token (optional)",
+  "Required only when authentication is enabled on your Firecrawl deployment.": "Nur erforderlich, wenn die Authentifizierung Ihrer Firecrawl-Installation aktiviert ist.",
+  "Request Timeout": "Zeitüberschreitung der Anfrage",
+  "{{seconds}} seconds": "{{seconds}} Sekunden",
+  "Fallback to native webpage reading": "Auf natives Lesen zurückfallen",
+  "When disabled, this device will not access the target webpage directly if Firecrawl fails.": "Wenn deaktiviert, greift dieses Gerät bei einem Firecrawl-Fehler nicht direkt auf die Zielwebseite zu.",
+  "The connection check asks Firecrawl to scrape https://example.com.": "Die Verbindungsprüfung lässt Firecrawl https://example.com abrufen.",
+  "Unable to connect to Firecrawl.": "Verbindung zu Firecrawl nicht möglich."
 }

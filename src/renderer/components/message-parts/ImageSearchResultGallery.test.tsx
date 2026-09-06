@@ -33,6 +33,7 @@ import {
   collectImageSearchResults,
   extractImageSearchResults,
   ImageSearchResultGallery,
+  selectUnreferencedImageSearchResults,
 } from './ImageSearchResultGallery'
 
 const result = {
@@ -74,6 +75,12 @@ describe('ImageSearchResultGallery', () => {
     ).toEqual([result])
   })
 
+  it('selects image results omitted or rewritten by the model for the fallback gallery', () => {
+    const omitted = { ...result, imageUrl: 'https://images.example.com/other.jpg' }
+    expect(selectUnreferencedImageSearchResults([result, omitted], `Shown: ${result.imageUrl}`)).toEqual([omitted])
+    expect(selectUnreferencedImageSearchResults([result], `Shown: ${result.thumbnailUrl}`)).toEqual([])
+  })
+
   it('renders a thumbnail, metadata, and source action', () => {
     renderGallery()
     expect(screen.getByRole('img', { name: 'Northern lights' }).getAttribute('src')).toBe(result.thumbnailUrl)
@@ -82,7 +89,7 @@ describe('ImageSearchResultGallery', () => {
     expect(openLinkMock).toHaveBeenCalledWith(result.sourceUrl)
   })
 
-  it('falls back from thumbnail to original image, then hides an unavailable result', () => {
+  it('falls back from thumbnail to original image, then shows a source card for an unavailable result', () => {
     renderGallery()
     const thumbnail = screen.getByRole('img', { name: 'Northern lights' })
     fireEvent.error(thumbnail)
@@ -90,7 +97,8 @@ describe('ImageSearchResultGallery', () => {
     expect(original.getAttribute('src')).toBe(result.imageUrl)
     fireEvent.error(original)
     expect(screen.queryByRole('img', { name: 'Northern lights' })).toBeNull()
-    expect(screen.queryByText('Image unavailable')).toBeNull()
-    expect(screen.queryByRole('button', { name: /Open source/ })).toBeNull()
+    expect(screen.getByText('Image unavailable')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /Open source/ }))
+    expect(openLinkMock).toHaveBeenCalledWith(result.sourceUrl)
   })
 })

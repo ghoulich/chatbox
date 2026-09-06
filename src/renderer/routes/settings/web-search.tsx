@@ -1,4 +1,4 @@
-import { Button, Flex, PasswordInput, Select, Stack, Text, TextInput, Title } from '@mantine/core'
+import { Button, Flex, PasswordInput, Select, Stack, Switch, Text, TextInput, Title } from '@mantine/core'
 import { IconCheck, IconX } from '@tabler/icons-react'
 import { createFileRoute } from '@tanstack/react-router'
 import { ofetch } from 'ofetch'
@@ -13,6 +13,7 @@ import { PROVIDERS_WITH_PARSE_LINK } from '@/packages/web-search'
 import { BochaSearch } from '@/packages/web-search/bocha'
 import { WEB_SEARCH_PROVIDERS, type WebSearchProviderValue } from '@/packages/web-search/constants'
 import { QUERIT_SEARCH_URL } from '@/packages/web-search/querit'
+import { readWebpageWithFirecrawl } from '@/packages/web-search/firecrawl'
 import { type SearXNGAuth, SearXNGSearch } from '@/packages/web-search/searxng'
 import platform from '@/platform'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -82,6 +83,25 @@ export function RouteComponent() {
       setSearxngAvailable(false)
     } finally {
       setCheckingSearxng(false)
+    }
+  }
+
+  const [checkingFirecrawl, setCheckingFirecrawl] = useState(false)
+  const [firecrawlAvailable, setFirecrawlAvailable] = useState<boolean>()
+  const checkFirecrawl = async () => {
+    setCheckingFirecrawl(true)
+    setFirecrawlAvailable(undefined)
+    try {
+      await readWebpageWithFirecrawl('https://example.com', {
+        endpoint: extension.webSearch.firecrawlEndpoint ?? '',
+        bearerToken: extension.webSearch.firecrawlBearerToken,
+        timeoutSeconds: extension.webSearch.firecrawlTimeoutSeconds,
+      })
+      setFirecrawlAvailable(true)
+    } catch {
+      setFirecrawlAvailable(false)
+    } finally {
+      setCheckingFirecrawl(false)
     }
   }
 
@@ -159,7 +179,9 @@ export function RouteComponent() {
           {t('Provided tools')}
         </Text>
         {(() => {
-          const supportsParseLink = PROVIDERS_WITH_PARSE_LINK.has(extension.webSearch.provider)
+          const supportsParseLink =
+            (extension.webSearch.webpageReader ?? 'native') === 'firecrawl' ||
+            PROVIDERS_WITH_PARSE_LINK.has(extension.webSearch.provider)
           const supportsImageSearch = extension.webSearch.provider === 'searxng'
           const tools: { label: string; supported: boolean }[] = [
             { label: t('Web Search'), supported: true },
@@ -192,13 +214,136 @@ export function RouteComponent() {
           )}
         </Text>
       )}
+      <Stack gap="sm">
+        <Title order={6}>{t('Webpage Reader')}</Title>
+        <Text size="xs" c="chatbox-gray">
+          {t('Choose where parse_link reads webpages. Search remains handled by the selected search provider.')}
+        </Text>
+        <AdaptiveSelect
+          label={t('Webpage Reader')}
+          maw={320}
+          data={[
+            { value: 'native', label: t('Native (this device)') },
+            { value: 'firecrawl', label: 'Firecrawl' },
+          ]}
+          value={extension.webSearch.webpageReader ?? 'native'}
+          onChange={(value) => {
+            if (!value) return
+            setFirecrawlAvailable(undefined)
+            setSettings({
+              extension: {
+                ...extension,
+                webSearch: {
+                  ...extension.webSearch,
+                  webpageReader: value as 'native' | 'firecrawl',
+                },
+              },
+            })
+          }}
+        />
+        {(extension.webSearch.webpageReader ?? 'native') === 'native' ? (
+          <Text size="xs" c="chatbox-gray">
+            {t('Webpage reading downloads and extracts the main article text locally on this device.')}
+          </Text>
+        ) : (
+          <Stack gap="sm">
+            <Text size="xs" c="chatbox-gray">
+              {t(
+                'Webpage reading is performed by Firecrawl; this device connects only to the configured Firecrawl endpoint.'
+              )}
+            </Text>
+            <TextInput
+              label={t('Firecrawl Endpoint')}
+              description={t('Enter a server base URL or a full /v1/scrape or /v2/scrape endpoint.')}
+              placeholder="https://firecrawl.example.com"
+              maw={480}
+              value={extension.webSearch.firecrawlEndpoint ?? ''}
+              error={firecrawlAvailable === false ? t('Unable to connect to Firecrawl.') : undefined}
+              onChange={(event) => {
+                setFirecrawlAvailable(undefined)
+                setSettings({
+                  extension: {
+                    ...extension,
+                    webSearch: { ...extension.webSearch, firecrawlEndpoint: event.currentTarget.value },
+                  },
+                })
+              }}
+            />
+            <PasswordInput
+              label={t('Firecrawl Bearer Token (optional)')}
+              description={t('Required only when authentication is enabled on your Firecrawl deployment.')}
+              maw={480}
+              value={extension.webSearch.firecrawlBearerToken ?? ''}
+              onChange={(event) =>
+                setSettings({
+                  extension: {
+                    ...extension,
+                    webSearch: { ...extension.webSearch, firecrawlBearerToken: event.currentTarget.value },
+                  },
+                })
+              }
+            />
+            <Select
+              label={t('Request Timeout')}
+              maw={240}
+              data={['30', '60', '90', '120'].map((value) => ({
+                value,
+                label: t('{{seconds}} seconds', { seconds: value }),
+              }))}
+              value={String(extension.webSearch.firecrawlTimeoutSeconds ?? 60)}
+              onChange={(value) =>
+                value &&
+                setSettings({
+                  extension: {
+                    ...extension,
+                    webSearch: { ...extension.webSearch, firecrawlTimeoutSeconds: Number(value) },
+                  },
+                })
+              }
+            />
+            <Switch
+              label={t('Fallback to native webpage reading')}
+              description={t(
+                'When disabled, this device will not access the target webpage directly if Firecrawl fails.'
+              )}
+              checked={extension.webSearch.firecrawlFallbackToNative ?? false}
+              onChange={(event) =>
+                setSettings({
+                  extension: {
+                    ...extension,
+                    webSearch: { ...extension.webSearch, firecrawlFallbackToNative: event.currentTarget.checked },
+                  },
+                })
+              }
+            />
+            <Text size="xs" c="chatbox-gray">
+              {t('The connection check asks Firecrawl to scrape https://example.com.')}
+            </Text>
+            <Flex align="center" gap="xs">
+              <Button
+                color="blue"
+                variant="light"
+                onClick={checkFirecrawl}
+                loading={checkingFirecrawl}
+                disabled={!extension.webSearch.firecrawlEndpoint?.trim()}
+              >
+                {t('Check')}
+              </Button>
+              {firecrawlAvailable === true && (
+                <Text size="xs" c="chatbox-success">
+                  {t('Connection successful!')}
+                </Text>
+              )}
+            </Flex>
+          </Stack>
+        )}
+      </Stack>
       {extension.webSearch.provider === 'searxng' && (
         <Stack gap="md">
           <Text size="xs" c="chatbox-gray">
-            {t('SearXNG provides private web, image, and video search. The server must enable JSON responses and suitable image and video engines.')}
-          </Text>
-          <Text size="xs" c="chatbox-gray">
-            {t('Webpage reading downloads and extracts the main article text locally on this device.')}
+            {t(
+              'SearXNG provides private web, image, and video search. The server must enable JSON responses and suitable image and video engines.'
+            )}
           </Text>
           <Stack gap="xs">
             <TextInput
@@ -210,29 +355,107 @@ export function RouteComponent() {
               error={searxngAvailable === false ? t('Unable to connect to SearXNG.') : undefined}
               onChange={(event) => {
                 setSearxngAvailable(undefined)
-                setSettings({ extension: { ...extension, webSearch: { ...extension.webSearch, searxngBaseUrl: event.currentTarget.value } } })
+                setSettings({
+                  extension: {
+                    ...extension,
+                    webSearch: { ...extension.webSearch, searxngBaseUrl: event.currentTarget.value },
+                  },
+                })
               }}
             />
             <AdaptiveSelect
               label={t('Authentication')}
               maw={320}
-              data={[{ value: 'none', label: t('None') }, { value: 'basic', label: t('Basic Authentication') }, { value: 'bearer', label: t('Bearer Token') }]}
+              data={[
+                { value: 'none', label: t('None') },
+                { value: 'basic', label: t('Basic Authentication') },
+                { value: 'bearer', label: t('Bearer Token') },
+              ]}
               value={extension.webSearch.searxngAuthType ?? 'none'}
-              onChange={(value) => value && setSettings({ extension: { ...extension, webSearch: { ...extension.webSearch, searxngAuthType: value as 'none' | 'basic' | 'bearer' } } })}
+              onChange={(value) =>
+                value &&
+                setSettings({
+                  extension: {
+                    ...extension,
+                    webSearch: { ...extension.webSearch, searxngAuthType: value as 'none' | 'basic' | 'bearer' },
+                  },
+                })
+              }
             />
             {extension.webSearch.searxngAuthType === 'basic' && (
               <Flex gap="xs" align="flex-end" wrap="wrap">
-                <TextInput label={t('Username')} value={extension.webSearch.searxngUsername ?? ''} onChange={(event) => setSettings({ extension: { ...extension, webSearch: { ...extension.webSearch, searxngUsername: event.currentTarget.value } } })} />
-                <PasswordInput label={t('Password')} value={extension.webSearch.searxngPassword ?? ''} onChange={(event) => setSettings({ extension: { ...extension, webSearch: { ...extension.webSearch, searxngPassword: event.currentTarget.value } } })} />
+                <TextInput
+                  label={t('Username')}
+                  value={extension.webSearch.searxngUsername ?? ''}
+                  onChange={(event) =>
+                    setSettings({
+                      extension: {
+                        ...extension,
+                        webSearch: { ...extension.webSearch, searxngUsername: event.currentTarget.value },
+                      },
+                    })
+                  }
+                />
+                <PasswordInput
+                  label={t('Password')}
+                  value={extension.webSearch.searxngPassword ?? ''}
+                  onChange={(event) =>
+                    setSettings({
+                      extension: {
+                        ...extension,
+                        webSearch: { ...extension.webSearch, searxngPassword: event.currentTarget.value },
+                      },
+                    })
+                  }
+                />
               </Flex>
             )}
             {extension.webSearch.searxngAuthType === 'bearer' && (
-              <PasswordInput label={t('Bearer Token')} maw={480} value={extension.webSearch.searxngBearerToken ?? ''} onChange={(event) => setSettings({ extension: { ...extension, webSearch: { ...extension.webSearch, searxngBearerToken: event.currentTarget.value } } })} />
+              <PasswordInput
+                label={t('Bearer Token')}
+                maw={480}
+                value={extension.webSearch.searxngBearerToken ?? ''}
+                onChange={(event) =>
+                  setSettings({
+                    extension: {
+                      ...extension,
+                      webSearch: { ...extension.webSearch, searxngBearerToken: event.currentTarget.value },
+                    },
+                  })
+                }
+              />
             )}
           </Stack>
           <Flex gap="md" wrap="wrap">
-            <Select label={t('Maximum Results')} data={['5', '10', '15', '20']} value={String(extension.webSearch.searxngMaxResults ?? 10)} onChange={(value) => value && setSettings({ extension: { ...extension, webSearch: { ...extension.webSearch, searxngMaxResults: Number(value) } } })} />
-            <Select label={t('Safe Search')} data={[{ value: '0', label: t('Off') }, { value: '1', label: t('Moderate') }, { value: '2', label: t('Strict') }]} value={String(extension.webSearch.searxngSafeSearch ?? 1)} onChange={(value) => value && setSettings({ extension: { ...extension, webSearch: { ...extension.webSearch, searxngSafeSearch: Number(value) as 0 | 1 | 2 } } })} />
+            <Select
+              label={t('Maximum Results')}
+              data={['5', '10', '15', '20']}
+              value={String(extension.webSearch.searxngMaxResults ?? 10)}
+              onChange={(value) =>
+                value &&
+                setSettings({
+                  extension: { ...extension, webSearch: { ...extension.webSearch, searxngMaxResults: Number(value) } },
+                })
+              }
+            />
+            <Select
+              label={t('Safe Search')}
+              data={[
+                { value: '0', label: t('Off') },
+                { value: '1', label: t('Moderate') },
+                { value: '2', label: t('Strict') },
+              ]}
+              value={String(extension.webSearch.searxngSafeSearch ?? 1)}
+              onChange={(value) =>
+                value &&
+                setSettings({
+                  extension: {
+                    ...extension,
+                    webSearch: { ...extension.webSearch, searxngSafeSearch: Number(value) as 0 | 1 | 2 },
+                  },
+                })
+              }
+            />
           </Flex>
           <Flex align="center" gap="xs">
             <Button

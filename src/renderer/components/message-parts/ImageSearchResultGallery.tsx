@@ -1,6 +1,6 @@
 import { Box, Button, Image, Paper, Stack, Text } from '@mantine/core'
 import type { ImageSearchResultItem } from '@shared/image-search-tool'
-import { IconExternalLink } from '@tabler/icons-react'
+import { IconExternalLink, IconPhotoOff } from '@tabler/icons-react'
 import { type FC, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ImageViewer, ImageViewerItem } from '@/components/ImageViewer'
@@ -42,6 +42,16 @@ export function collectImageSearchResults(
   return results
 }
 
+export function selectUnreferencedImageSearchResults(
+  results: ImageSearchResultItem[],
+  answerText: string,
+  limit = 10
+): ImageSearchResultItem[] {
+  return results
+    .filter((result) => !answerText.includes(result.imageUrl) && !answerText.includes(result.thumbnailUrl))
+    .slice(0, Math.max(0, limit))
+}
+
 function parseResolution(resolution: string): { width: number; height: number } {
   const match = resolution.match(/(\d+)\s*[x×]\s*(\d+)/i)
   if (!match) return { width: 1024, height: 1024 }
@@ -64,7 +74,40 @@ const ImageSearchCard: FC<{ result: ImageSearchResultItem }> = ({ result }) => {
     setFailed(true)
   }
 
-  if (failed) return null
+  if (failed) {
+    return (
+      <Paper radius="md" withBorder className="overflow-hidden" style={{ minWidth: 0 }}>
+        <Box
+          h={150}
+          bg="var(--chatbox-background-gray-secondary)"
+          className="flex flex-col items-center justify-center gap-2"
+        >
+          <IconPhotoOff size={34} />
+          <Text size="xs" c="chatbox-tertiary">
+            {t('Image unavailable')}
+          </Text>
+        </Box>
+        <Stack gap={4} p="xs">
+          <Text size="xs" fw={600} lineClamp={2} title={result.title}>
+            {result.title}
+          </Text>
+          <Text size="10px" c="chatbox-tertiary" truncate="end">
+            {result.source}
+          </Text>
+          <Button
+            size="compact-xs"
+            variant="subtle"
+            px={0}
+            justify="flex-start"
+            rightSection={<IconExternalLink size={11} />}
+            onClick={() => platform.openLink(result.sourceUrl)}
+          >
+            {t('Open source')}
+          </Button>
+        </Stack>
+      </Paper>
+    )
+  }
 
   return (
     <Paper radius="md" withBorder className="overflow-hidden" style={{ minWidth: 0 }}>

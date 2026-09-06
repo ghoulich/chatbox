@@ -11,6 +11,7 @@ import {
   webSearchExecutor,
 } from '@/packages/web-search'
 import platform from '@/platform'
+import { readWebpageWithFirecrawl } from '@/packages/web-search/firecrawl'
 import * as settingActions from '@/stores/settingActions'
 import { asRecord, numberField, stringField, toTextModelOutput } from './model-output'
 
@@ -109,7 +110,26 @@ export const parseLinkTool: ToolSet[string] = {
     const maxLength = parseInput.maxLength ?? DEFAULT_PARSE_LINK_MAX_CHARS
     const normalizedMaxLength = Math.min(Math.max(maxLength, 500), 50_000)
 
-    const searchProvider = settingActions.getExtensionSettings().webSearch.provider
+    const webSearchSettings = settingActions.getExtensionSettings().webSearch
+    const searchProvider = webSearchSettings.provider
+
+    if ((webSearchSettings.webpageReader ?? 'native') === 'firecrawl') {
+      try {
+        const parsed = await readWebpageWithFirecrawl(
+          parseInput.url,
+          {
+            endpoint: webSearchSettings.firecrawlEndpoint ?? '',
+            bearerToken: webSearchSettings.firecrawlBearerToken,
+            timeoutSeconds: webSearchSettings.firecrawlTimeoutSeconds,
+          },
+          abortSignal
+        )
+        return buildParseLinkResult({ ...parsed, maxLength: normalizedMaxLength })
+      } catch (error) {
+        if (!webSearchSettings.firecrawlFallbackToNative) throw error
+        console.warn('Firecrawl webpage reading failed; falling back to the configured native reader:', error)
+      }
+    }
 
     // Chatbox AI (build-in) path: licensed users use the authenticated parser; BYOK users fall back to free parser.
     if (searchProvider === 'build-in') {

@@ -1485,5 +1485,19 @@
   "Split conversation attachments into searchable chunks. The configured embedding model builds and searches the index; the configured reranking model refines matching chunks.": "Delar konversationsbilagor i sökbara delar. Den konfigurerade embedding-modellen bygger och söker i indexet, och omrankningsmodellen förbättrar träffarna.",
   "Send the full parsed attachment text directly to the chat model without embedding or reranking.": "Skickar hela den analyserade bilagetexten direkt till chattmodellen utan embedding eller omrankning.",
   "Automatically use embedding retrieval for supported large attachments on every platform; otherwise send the full parsed text inline.": "Använder automatiskt embedding-sökning för stora bilagor som stöds på alla plattformar; annars skickas hela den analyserade texten direkt.",
-  "Embedding retrieval requires a configured embedding model or an active Chatbox AI license.": "Embedding-sökning kräver en konfigurerad embedding-modell eller en aktiv Chatbox AI-licens."
+  "Embedding retrieval requires a configured embedding model or an active Chatbox AI license.": "Embedding-sökning kräver en konfigurerad embedding-modell eller en aktiv Chatbox AI-licens.",
+  "Webpage Reader": "Webbsidesläsare",
+  "Choose where parse_link reads webpages. Search remains handled by the selected search provider.": "Välj var parse_link läser webbsidor. Sökningen hanteras fortfarande av den valda sökleverantören.",
+  "Native (this device)": "Inbyggd (den här enheten)",
+  "Webpage reading is performed by Firecrawl; this device connects only to the configured Firecrawl endpoint.": "Firecrawl läser webbsidor; enheten ansluter endast till den konfigurerade Firecrawl-slutpunkten.",
+  "Firecrawl Endpoint": "Firecrawl-slutpunkt",
+  "Enter a server base URL or a full /v1/scrape or /v2/scrape endpoint.": "Ange serverns bas-URL eller en fullständig /v1/scrape- eller /v2/scrape-slutpunkt.",
+  "Firecrawl Bearer Token (optional)": "Firecrawl Bearer Token (valfri)",
+  "Required only when authentication is enabled on your Firecrawl deployment.": "Krävs endast om autentisering är aktiverad i din Firecrawl-installation.",
+  "Request Timeout": "Tidsgräns för begäran",
+  "{{seconds}} seconds": "{{seconds}} sekunder",
+  "Fallback to native webpage reading": "Använd inbyggd läsning som reserv",
+  "When disabled, this device will not access the target webpage directly if Firecrawl fails.": "När detta är avstängt ansluter enheten inte direkt till målsidan om Firecrawl misslyckas.",
+  "The connection check asks Firecrawl to scrape https://example.com.": "Anslutningskontrollen ber Firecrawl att hämta https://example.com.",
+  "Unable to connect to Firecrawl.": "Det gick inte att ansluta till Firecrawl."
 }

@@ -243,12 +243,95 @@ export function SVGPreview(props: { xmlCode: string; className?: string; generat
   )
 }
 
+export function getModernMermaidConfig(theme: 'light' | 'dark') {
+  const dark = theme === 'dark'
+  return {
+    theme: 'base' as const,
+    suppressErrorRendering: true,
+    themeVariables: dark
+      ? {
+          background: '#0B1220',
+          primaryColor: '#111C33',
+          primaryBorderColor: '#22D3EE',
+          primaryTextColor: '#E6F4FF',
+          secondaryColor: '#1B1B3A',
+          secondaryBorderColor: '#8B5CF6',
+          secondaryTextColor: '#F1ECFF',
+          tertiaryColor: '#102A37',
+          tertiaryBorderColor: '#2DD4BF',
+          tertiaryTextColor: '#E6FFFB',
+          lineColor: '#7DD3FC',
+          textColor: '#E6F4FF',
+          mainBkg: '#111C33',
+          nodeBorder: '#22D3EE',
+          clusterBkg: '#0F1A2E',
+          clusterBorder: '#334A68',
+          edgeLabelBackground: '#0B1220',
+          noteBkgColor: '#172554',
+          noteBorderColor: '#60A5FA',
+          noteTextColor: '#E6F4FF',
+          actorBkg: '#111C33',
+          actorBorder: '#22D3EE',
+          actorTextColor: '#E6F4FF',
+          signalColor: '#BAE6FD',
+          signalTextColor: '#E6F4FF',
+          labelBackground: '#111C33',
+          labelTextColor: '#E6F4FF',
+          fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
+        }
+      : {
+          background: '#F8FBFF',
+          primaryColor: '#EEF6FF',
+          primaryBorderColor: '#0284C7',
+          primaryTextColor: '#0F2742',
+          secondaryColor: '#F1EEFF',
+          secondaryBorderColor: '#7C3AED',
+          secondaryTextColor: '#312E81',
+          tertiaryColor: '#ECFEFF',
+          tertiaryBorderColor: '#0D9488',
+          tertiaryTextColor: '#134E4A',
+          lineColor: '#2563EB',
+          textColor: '#0F2742',
+          mainBkg: '#EEF6FF',
+          nodeBorder: '#0284C7',
+          clusterBkg: '#F5F9FF',
+          clusterBorder: '#9CB6D4',
+          edgeLabelBackground: '#F8FBFF',
+          noteBkgColor: '#EEF2FF',
+          noteBorderColor: '#6366F1',
+          noteTextColor: '#1E1B4B',
+          actorBkg: '#EEF6FF',
+          actorBorder: '#0284C7',
+          actorTextColor: '#0F2742',
+          signalColor: '#1D4ED8',
+          signalTextColor: '#0F2742',
+          labelBackground: '#EEF6FF',
+          labelTextColor: '#0F2742',
+          fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
+        },
+    flowchart: {
+      curve: 'basis' as const,
+      padding: 18,
+      nodeSpacing: 42,
+      rankSpacing: 54,
+      htmlLabels: true,
+    },
+    sequence: {
+      actorMargin: 56,
+      messageMargin: 42,
+      boxMargin: 12,
+      diagramMarginX: 24,
+      diagramMarginY: 18,
+    },
+  }
+}
+
 async function mermaidCodeToSvgCode(source: string, theme: 'light' | 'dark') {
   if (typeof structuredClone !== 'function') {
     await import('core-js/actual/structured-clone.js')
   }
   const { default: mermaid } = await import('mermaid')
-  mermaid.initialize({ theme: theme === 'light' ? 'default' : 'dark', suppressErrorRendering: true })
+  mermaid.initialize(getModernMermaidConfig(theme))
   const id = `mermaidtmp${Math.random().toString(36).substring(2, 15)}`
   const result = await mermaid.render(id, source)
   // 考虑到 mermaid 工具内部本身已经使用了 dompurify 进行处理，因此可以先假设它的输出是安全的

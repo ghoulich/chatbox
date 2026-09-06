@@ -1485,5 +1485,19 @@
   "Split conversation attachments into searchable chunks. The configured embedding model builds and searches the index; the configured reranking model refines matching chunks.": "يقسّم مرفقات المحادثة إلى مقاطع قابلة للبحث. ينشئ نموذج التضمين الفهرس ويبحث فيه، ويحسّن نموذج إعادة الترتيب المقاطع المطابقة.",
   "Send the full parsed attachment text directly to the chat model without embedding or reranking.": "يرسل النص الكامل المحلّل للمرفق مباشرةً إلى نموذج الدردشة دون تضمين أو إعادة ترتيب.",
   "Automatically use embedding retrieval for supported large attachments on every platform; otherwise send the full parsed text inline.": "يستخدم استرجاع التضمين تلقائيًا للمرفقات الكبيرة المدعومة على جميع المنصات؛ وإلا يرسل النص الكامل بعد تحليله مباشرةً.",
-  "Embedding retrieval requires a configured embedding model or an active Chatbox AI license.": "يتطلب الاسترجاع بالتضمين نموذج تضمين مهيأ أو ترخيص Chatbox AI نشطًا."
+  "Embedding retrieval requires a configured embedding model or an active Chatbox AI license.": "يتطلب الاسترجاع بالتضمين نموذج تضمين مهيأ أو ترخيص Chatbox AI نشطًا.",
+  "Webpage Reader": "قارئ صفحات الويب",
+  "Choose where parse_link reads webpages. Search remains handled by the selected search provider.": "اختر الخدمة التي يقرأ بها parse_link صفحات الويب. يظل البحث من اختصاص موفر البحث المحدد.",
+  "Native (this device)": "محلي (هذا الجهاز)",
+  "Webpage reading is performed by Firecrawl; this device connects only to the configured Firecrawl endpoint.": "ينفذ Firecrawl قراءة الصفحات؛ ويتصل هذا الجهاز بنقطة Firecrawl المضبوطة فقط.",
+  "Firecrawl Endpoint": "نقطة نهاية Firecrawl",
+  "Enter a server base URL or a full /v1/scrape or /v2/scrape endpoint.": "أدخل عنوان الخادم الأساسي أو نقطة /v1/scrape أو /v2/scrape كاملة.",
+  "Firecrawl Bearer Token (optional)": "Firecrawl Bearer Token (اختياري)",
+  "Required only when authentication is enabled on your Firecrawl deployment.": "مطلوب فقط عند تفعيل المصادقة في نشر Firecrawl.",
+  "Request Timeout": "مهلة الطلب",
+  "{{seconds}} seconds": "{{seconds}} ثانية",
+  "Fallback to native webpage reading": "الرجوع إلى القراءة المحلية",
+  "When disabled, this device will not access the target webpage directly if Firecrawl fails.": "عند التعطيل، لن يصل هذا الجهاز مباشرة إلى الصفحة الهدف إذا فشل Firecrawl.",
+  "The connection check asks Firecrawl to scrape https://example.com.": "يطلب فحص الاتصال من Firecrawl استخراج https://example.com.",
+  "Unable to connect to Firecrawl.": "تعذر الاتصال بـ Firecrawl."
 }

@@ -10,6 +10,7 @@ const {
   getSettingsMock,
   isProMock,
   webSearchProvider,
+  webpageReader,
   buildCodeExecutionToolsMock,
   buildRunCommandToolMock,
   getSessionAttachmentRagToolSetMock,
@@ -47,6 +48,7 @@ const {
   getSettingsMock: vi.fn(),
   isProMock: vi.fn(),
   webSearchProvider: { current: 'build-in' },
+  webpageReader: { current: 'native' as 'native' | 'firecrawl' },
   buildCodeExecutionToolsMock: vi.fn(),
   buildRunCommandToolMock: vi.fn(),
   getSessionAttachmentRagToolSetMock: vi.fn(),
@@ -159,6 +161,7 @@ vi.mock('@/stores/settingActions', () => ({
   getExtensionSettings: () => ({
     webSearch: {
       provider: webSearchProvider.current,
+      webpageReader: webpageReader.current,
     },
   }),
   isPro: isProMock,
@@ -293,6 +296,7 @@ beforeEach(() => {
   settingsState.enableMermaidRendering = true
   settingsState.interactiveAnimationsEnabled = false
   webSearchProvider.current = 'build-in'
+  webpageReader.current = 'native'
   platformName.current = 'darwin'
   isProMock.mockReturnValue(true)
   buildCodeExecutionToolsMock.mockReturnValue({
@@ -792,6 +796,21 @@ describe('buildToolsForSession', () => {
     expect(result.tools.web_search).toBeDefined()
     expect(result.tools.parse_link).toBeUndefined()
     expect(result.instructions).not.toContain('## parse_link')
+  })
+
+  test('Firecrawl exposes parse_link independently of the selected search provider', async () => {
+    webSearchProvider.current = 'bing'
+    webpageReader.current = 'firecrawl'
+
+    const result = await buildToolsForSession(createMockModel(), {
+      webBrowsing: true,
+      messages: [],
+      agentMode: 'off',
+    })
+
+    expect(result.tools.web_search).toBeDefined()
+    expect(result.tools.parse_link).toBeDefined()
+    expect(result.instructions).toContain('## parse_link')
   })
 
   test('SearXNG exposes image_search and video_search with their model instructions', async () => {

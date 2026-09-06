@@ -342,6 +342,11 @@ const ExtensionSettingsSchema = z.object({
     searxngBearerToken: z.string().optional(),
     searxngMaxResults: z.number().int().min(1).max(20).optional(),
     searxngSafeSearch: z.union([z.literal(0), z.literal(1), z.literal(2)]).optional(),
+    webpageReader: z.enum(['native', 'firecrawl']).optional(),
+    firecrawlEndpoint: z.string().optional(),
+    firecrawlBearerToken: z.string().optional(),
+    firecrawlTimeoutSeconds: z.number().int().min(10).max(120).optional(),
+    firecrawlFallbackToNative: z.boolean().optional(),
   }),
   knowledgeBase: z
     .object({

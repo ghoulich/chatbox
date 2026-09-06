@@ -1485,5 +1485,19 @@
   "Split conversation attachments into searchable chunks. The configured embedding model builds and searches the index; the configured reranking model refines matching chunks.": "会話の添付ファイルを検索可能なチャンクに分割します。設定済みの埋め込みモデルで索引を作成・検索し、再ランキングモデルで一致結果を改善します。",
   "Send the full parsed attachment text directly to the chat model without embedding or reranking.": "解析した添付ファイルの全文を、埋め込みや再ランキングを使わずチャットモデルへ直接送信します。",
   "Automatically use embedding retrieval for supported large attachments on every platform; otherwise send the full parsed text inline.": "すべてのプラットフォームで、対応する大きな添付ファイルには埋め込み検索を自動的に使用し、それ以外は解析済みの全文をインラインで送信します。",
-  "Embedding retrieval requires a configured embedding model or an active Chatbox AI license.": "埋め込み検索には、設定済みの埋め込みモデルまたは有効な Chatbox AI ライセンスが必要です。"
+  "Embedding retrieval requires a configured embedding model or an active Chatbox AI license.": "埋め込み検索には、設定済みの埋め込みモデルまたは有効な Chatbox AI ライセンスが必要です。",
+  "Webpage Reader": "ウェブページリーダー",
+  "Choose where parse_link reads webpages. Search remains handled by the selected search provider.": "parse_link でウェブページを読むサービスを選択します。検索は選択中の検索プロバイダーが引き続き処理します。",
+  "Native (this device)": "ネイティブ（この端末）",
+  "Webpage reading is performed by Firecrawl; this device connects only to the configured Firecrawl endpoint.": "ウェブページの読み取りは Firecrawl が実行し、この端末は設定した Firecrawl エンドポイントのみに接続します。",
+  "Firecrawl Endpoint": "Firecrawl エンドポイント",
+  "Enter a server base URL or a full /v1/scrape or /v2/scrape endpoint.": "サーバーのベース URL、または完全な /v1/scrape、/v2/scrape エンドポイントを入力します。",
+  "Firecrawl Bearer Token (optional)": "Firecrawl Bearer Token（任意）",
+  "Required only when authentication is enabled on your Firecrawl deployment.": "Firecrawl の配置で認証を有効にしている場合のみ必要です。",
+  "Request Timeout": "リクエストのタイムアウト",
+  "{{seconds}} seconds": "{{seconds}} 秒",
+  "Fallback to native webpage reading": "ネイティブのウェブページ読み取りにフォールバック",
+  "When disabled, this device will not access the target webpage directly if Firecrawl fails.": "無効の場合、Firecrawl が失敗してもこの端末は対象ページへ直接アクセスしません。",
+  "The connection check asks Firecrawl to scrape https://example.com.": "接続確認では Firecrawl に https://example.com の取得を依頼します。",
+  "Unable to connect to Firecrawl.": "Firecrawl に接続できません。"
 }

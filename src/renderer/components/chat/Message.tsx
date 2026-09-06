@@ -74,7 +74,11 @@ import ActionMenu, { type ActionMenuItemProps } from '../ActionMenu'
 import { AssistantAvatar, SystemAvatar, UserAvatar } from '../common/Avatar'
 import { ScalableIcon } from '../common/ScalableIcon'
 import Loading from '../icons/Loading'
-import { collectImageSearchResults } from '../message-parts/ImageSearchResultGallery'
+import {
+  collectImageSearchResults,
+  ImageSearchResultGallery,
+  selectUnreferencedImageSearchResults,
+} from '../message-parts/ImageSearchResultGallery'
 import {
   collectVideoSearchResults,
   selectUnreferencedVideoSearchResults,
@@ -563,6 +567,10 @@ const _Message: FC<Props> = (props) => {
     () => selectUnreferencedVideoSearchResults(finalVideoSearchResults, answerText),
     [answerText, finalVideoSearchResults]
   )
+  const fallbackImageSearchResults = useMemo(
+    () => selectUnreferencedImageSearchResults(finalImageSearchResults, answerText),
+    [answerText, finalImageSearchResults]
+  )
   const finalThreeJsAnimations = useMemo(() => collectThreeJsAnimations(contentParts), [contentParts])
 
   // Normalize provider-specific non-streaming reasoning order before deciding
@@ -1037,8 +1045,15 @@ const _Message: FC<Props> = (props) => {
                     />
                   ) : null
                 )}
-                {msg.role === 'assistant' && !msg.generating && fallbackVideoSearchResults.length > 0 && (
-                  <VideoSearchResultGallery results={fallbackVideoSearchResults} />
+                {msg.role === 'assistant' && !msg.generating && (
+                  <>
+                    {fallbackImageSearchResults.length > 0 && (
+                      <ImageSearchResultGallery results={fallbackImageSearchResults} />
+                    )}
+                    {fallbackVideoSearchResults.length > 0 && (
+                      <VideoSearchResultGallery results={fallbackVideoSearchResults} />
+                    )}
+                  </>
                 )}
               </div>
             ))}

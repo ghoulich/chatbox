@@ -50,16 +50,19 @@ The reproducible native overrides are kept here:
 The decoded build wrapper is intentionally kept outside this Git worktree at
 `../../../chatbox-v1.23.1-apk-build` so thousands of generated files are not mixed
 with the maintained TypeScript changes. The current signed output is
-`../../../chatbox-1.23.1-custom-v491-signed.apk` (`versionName 1.23.1.491`,
-`versionCode 491`). v491 includes the earlier Settings Store crash fix plus
+`../../../chatbox-1.23.1-custom-v492-signed.apk` (`versionName 1.23.1.492`,
+`versionCode 492`). v492 includes the earlier Settings Store crash fix plus
 Android Skills/remote MCP, media and diagram rendering, offline KaTeX,
 session-attachment inline/retrieval selection, native embedding/reranking
 requests, cross-platform automatic attachment routing, and automatic title
-generation for copilot sessions. Mobile attachment indexing additionally retries
-transient batch failures, saves completed batches as checkpoints, resumes from
-the first missing vector, and distinguishes indexing failures from parsing
-failures in the UI. See the local handoff outside the public repository and
-`../../test-evidence/mumu-v491/TEST_REPORT.md` before
+generation for copilot sessions. It also adds a configurable self-hosted
+Firecrawl webpage reader, deterministic image-search routing with fallback
+media cards, and modern adaptive Mermaid styling. Mobile attachment indexing
+additionally retries transient batch failures, saves completed batches as
+checkpoints, resumes from the first missing vector, and distinguishes indexing
+failures from parsing failures in the UI. See the local handoff outside the
+public repository and
+`../../test-evidence/mumu-v492/TEST_REPORT.md` before
 rebuilding.
 
 Security note: trusting a user-installed CA enables HTTPS to servers signed by

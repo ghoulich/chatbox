@@ -408,8 +408,11 @@ export async function buildToolsForSession(
   const needSessionAttachmentRagToolSet = sessionAttachmentIds.length > 0 && model.isSupportToolUse('read-file')
   const kbSupported = Boolean(knowledgeBase) && model.isSupportToolUse('knowledge-base')
   const webSupported = webBrowsing && model.isSupportToolUse('web-browsing')
-  const searchProvider = settingActions.getExtensionSettings().webSearch.provider
-  const includeParseLinkTool = webSupported && PROVIDERS_WITH_PARSE_LINK.has(searchProvider)
+  const webSearchSettings = settingActions.getExtensionSettings().webSearch
+  const searchProvider = webSearchSettings.provider
+  const includeParseLinkTool =
+    webSupported &&
+    ((webSearchSettings.webpageReader ?? 'native') === 'firecrawl' || PROVIDERS_WITH_PARSE_LINK.has(searchProvider))
   const includeImageSearchTool = webSupported && searchProvider === 'searxng'
   const includeVideoSearchTool = webSupported && searchProvider === 'searxng'
   const includeThreeJsAnimationTool =

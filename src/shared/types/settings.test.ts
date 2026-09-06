@@ -153,6 +153,11 @@ describe('SettingsSchema SearXNG search settings', () => {
       searxngPassword: 'secret',
       searxngMaxResults: 15,
       searxngSafeSearch: 2,
+      webpageReader: 'firecrawl',
+      firecrawlEndpoint: 'https://crawl.example.com',
+      firecrawlBearerToken: 'firecrawl-secret',
+      firecrawlTimeoutSeconds: 90,
+      firecrawlFallbackToNative: false,
     }
 
     const parsed = SettingsSchema.parse(input)
@@ -164,6 +169,11 @@ describe('SettingsSchema SearXNG search settings', () => {
       searxngPassword: 'secret',
       searxngMaxResults: 15,
       searxngSafeSearch: 2,
+      webpageReader: 'firecrawl',
+      firecrawlEndpoint: 'https://crawl.example.com',
+      firecrawlBearerToken: 'firecrawl-secret',
+      firecrawlTimeoutSeconds: 90,
+      firecrawlFallbackToNative: false,
     })
   })
 

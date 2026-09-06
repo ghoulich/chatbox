@@ -47,6 +47,7 @@ export function cleanSettingsForBackup(settings: Settings, includeKeys: boolean)
         delete webSearch.queritApiKey
         delete webSearch.searxngPassword
         delete webSearch.searxngBearerToken
+        delete webSearch.firecrawlBearerToken
         extension.webSearch = webSearch
       }
       if (settings.extension.documentParser?.mineru) {

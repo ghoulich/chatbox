@@ -58,14 +58,21 @@ We regularly sync code from the pro repo to this repo, and vice versa.
 
 This fork is based on the official Chatbox `v1.23.1` source and carries an
 Android-focused secondary-development branch. The current custom build version
-is `1.23.1.491`. It retains the upstream desktop and web code while adding the
+is `1.23.1.492`. It retains the upstream desktop and web code while adding the
 following Android capabilities:
 
 - Read-only Skills directory access through Android SAF, in-chat `load_skill`,
   enabled Skills controls, and remote HTTP/SSE MCP in Android Chat Mode.
 - SearXNG web, image, and video search with optional authentication and engine
-  selection; inline image cards and video thumbnails distinguish content that
-  can play in Chatbox from links that must open on the web.
+  selection. Explicit image requests are routed to image search, and resilient
+  inline galleries/cards keep the image preview and source link available even
+  when a model omits or rewrites the returned media URL. Video thumbnails also
+  distinguish content that can play in Chatbox from links that must open on the
+  web.
+- Configurable webpage reading through either Chatbox's native `parse_link` or
+  a self-hosted Firecrawl service. Firecrawl supports an optional Bearer token,
+  a bounded timeout, Android native HTTP transport, and an explicit native
+  fallback switch that is disabled by default.
 - Soul/persona injection for new Android conversations and automatic titles for
   copilot sessions without overwriting titles edited by the user.
 - Local Android network diagnostics, including DNS, ping/TCP/HTTP/TLS, Wi-Fi and
@@ -73,9 +80,11 @@ following Android capabilities:
   outside model-visible tool results.
 - Foreground-service-assisted background generation, persistent notifications,
   bounded wake locks, and the Settings Store crash fix for the background toggle.
-- Responsive Mermaid diagrams and sandboxed Three.js teaching animations with
-  full-screen layout, touch rotation/pan/pinch controls, offline KaTeX fonts,
-  lifecycle cleanup, and narrowly scoped security rules.
+- Responsive Mermaid diagrams with adaptive light/dark modern themes, semantic
+  color guidance, improved spacing and polished containers, plus sandboxed
+  Three.js teaching animations with full-screen layout, touch
+  rotation/pan/pinch controls, offline KaTeX fonts, lifecycle cleanup, and
+  narrowly scoped security rules.
 - Per-conversation attachment handling with inline text or embedding retrieval,
   optional reranking, a cross-platform automatic size/type policy, retriable
   embedding batches, persisted checkpoints, and resumable mobile indexing.
@@ -91,10 +100,20 @@ configuration, and application databases are intentionally not committed.
 
 Implementation notes are in [`custom/android/README.md`](./custom/android/README.md),
 and the latest device/test evidence is in
-[`test-evidence/mumu-v491/TEST_REPORT.md`](./test-evidence/mumu-v491/TEST_REPORT.md).
+[`test-evidence/mumu-v492/TEST_REPORT.md`](./test-evidence/mumu-v492/TEST_REPORT.md).
 The MuMu PDF parser can remain at “Preparing” before indexing; the v491 indexing
 reliability changes were separately verified with a large text attachment on
 MuMu and the same PDF was manually confirmed by the user on a physical phone.
+
+### Firecrawl setup
+
+Open **Settings → Web Search → Webpage Reader**, select **Firecrawl**, and enter
+the base URL of the self-hosted service (for example,
+`https://firecrawl.example.com`). Add a Bearer token only when the service
+requires one, choose a timeout, and use **Check connection** to run a real scrape
+request. Enable **Fall back to native reading** only if the Android device is
+allowed to fetch the target page itself when Firecrawl fails; leaving it
+disabled keeps webpage traffic on Firecrawl.
 
 ## Download
 
