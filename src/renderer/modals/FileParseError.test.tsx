@@ -149,4 +149,16 @@ describe('FileParseError', () => {
       expect(screen.queryByText('document parser')).toBeNull()
     }
   )
+
+  test('describes an indexing failure without calling it a parse failure', async () => {
+    showFileParseError('session_attachment_rag_indexing_failed: API Error: Status Code 404', 'manual.pdf')
+
+    expect(await screen.findByText('Indexing failed')).toBeTruthy()
+    expect(
+      screen.getByText(
+        'File parsing succeeded, but indexing failed after automatic retries. Use the button next to the file to continue indexing.'
+      )
+    ).toBeTruthy()
+    expect(screen.queryByText('Failed to parse file. Please try again or use a different file format.')).toBeNull()
+  })
 })

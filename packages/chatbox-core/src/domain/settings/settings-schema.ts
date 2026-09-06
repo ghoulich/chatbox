@@ -336,6 +336,12 @@ const ExtensionSettingsSchema = z.object({
     queritMaxResults: z.number().optional(),
     queritTimeRange: z.string().nullable().optional(),
     searxngBaseUrl: z.string().optional(),
+    searxngAuthType: z.enum(['none', 'basic', 'bearer']).optional(),
+    searxngUsername: z.string().optional(),
+    searxngPassword: z.string().optional(),
+    searxngBearerToken: z.string().optional(),
+    searxngMaxResults: z.number().int().min(1).max(20).optional(),
+    searxngSafeSearch: z.union([z.literal(0), z.literal(1), z.literal(2)]).optional(),
   }),
   knowledgeBase: z
     .object({
@@ -394,6 +400,40 @@ const VibedropPublicationSchema = z.object({
   visibility: z.enum(['unlisted', 'public']),
   uniqueId: z.string().optional(),
   updatedAt: z.number(),
+})
+
+export const NetworkToolsSettingsSchema = z.object({
+  enabled: z.boolean().default(true),
+  sshReadOnlyAutoApproval: z.boolean().default(true),
+  maxLanScanHosts: z.number().int().min(1).max(1024).default(256),
+  speedTestMaxBytes: z.number().int().min(1_000_000).max(500_000_000).default(25_000_000),
+  speedTestDownloadUrl: z.string().url().default('https://speed.cloudflare.com/__down'),
+  speedTestUploadUrl: z.string().url().default('https://speed.cloudflare.com/__up'),
+  sshProfiles: z
+    .array(
+      z.object({
+        id: z.string(),
+        name: z.string(),
+        host: z.string(),
+        port: z.number().int().min(1).max(65535).default(22),
+        username: z.string(),
+        credentialId: z.string(),
+        hostKeyFingerprint: z.string().optional(),
+      })
+    )
+    .default([]),
+  snmpProfiles: z
+    .array(
+      z.object({
+        id: z.string(),
+        name: z.string(),
+        host: z.string(),
+        port: z.number().int().min(1).max(65535).default(161),
+        version: z.enum(['2c', '3']).default('3'),
+        credentialId: z.string(),
+      })
+    )
+    .default([]),
 })
 
 export enum Theme {
@@ -475,8 +515,10 @@ export const SettingsSchema = GlobalSessionSettingsSchema.extend({
     })
     .optional()
     .catch(undefined),
+  visionAnalysisPrompt: z.string().optional().catch(undefined),
   defaultEmbeddingModel: DefaultModelSelectionSchema,
   defaultRerankModel: DefaultModelSelectionSchema,
+  sessionAttachmentProcessingMode: z.enum(['auto', 'inline', 'retrieval']).default('auto'),
 
   // chatboxai
   licenseKey: z.string().optional(),
@@ -542,6 +584,8 @@ export const SettingsSchema = GlobalSessionSettingsSchema.extend({
   // disableQuickToggleShortcut?: boolean // 是否关闭快捷键切换窗口显隐（弃用，为了兼容历史数据，这个字段永远不要使用）
 
   defaultPrompt: z.string().optional(), // 新会话的默认 prompt
+  defaultWebBrowsing: z.boolean().optional().catch(false),
+  defaultReasoningLevel: z.enum(['default', 'off', 'low', 'medium', 'high']).optional().catch('default'),
 
   proxy: z.string().optional(), // 代理地址
 
@@ -555,6 +599,8 @@ export const SettingsSchema = GlobalSessionSettingsSchema.extend({
   enableMarkdownRendering: z.boolean().default(true),
   enableMermaidRendering: z.boolean().default(true),
   enableLaTeXRendering: z.boolean().default(true),
+  backgroundGenerationEnabled: z.boolean().default(true),
+  interactiveAnimationsEnabled: z.boolean().default(true),
   injectDefaultMetadata: z.boolean().default(true), // 是否注入默认附加元数据（如模型名称、当前日期）
   autoPreviewArtifacts: z.boolean().default(false), // 是否自动展开预览 artifacts
   autoCollapseCodeBlock: z.boolean().default(true), // 是否自动折叠代码块
@@ -590,6 +636,17 @@ export const SettingsSchema = GlobalSessionSettingsSchema.extend({
     translationEnabled: true,
     builtinDefaultsInitialized: true,
     appliedDefaultBuiltinSkillNames: [...DEFAULT_ENABLED_BUILTIN_SKILL_NAMES],
+    mobileKnownSkillNames: [],
+  }),
+  networkTools: NetworkToolsSettingsSchema.catch({
+    enabled: true,
+    sshReadOnlyAutoApproval: true,
+    maxLanScanHosts: 256,
+    speedTestMaxBytes: 25_000_000,
+    speedTestDownloadUrl: 'https://speed.cloudflare.com/__down',
+    speedTestUploadUrl: 'https://speed.cloudflare.com/__up',
+    sshProfiles: [],
+    snmpProfiles: [],
   }),
 })
 
@@ -619,6 +676,7 @@ export type ExtensionSettings = z.infer<typeof ExtensionSettingsSchema>
 export type MCPTransportConfig = z.infer<typeof MCPTransportConfigSchema>
 export type MCPServerConfig = z.infer<typeof MCPServerConfigSchema>
 export type MCPSettings = z.infer<typeof MCPSettingsSchema>
+export type NetworkToolsSettings = z.infer<typeof NetworkToolsSettingsSchema>
 
 // Re-export SkillSettings for convenience
 export type { SkillSettings } from '../../types/skills'

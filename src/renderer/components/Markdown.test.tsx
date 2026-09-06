@@ -21,9 +21,18 @@ Object.defineProperty(window, 'matchMedia', {
   ),
 })
 
-const { openViewer, sandboxPersistArtifact, sandboxExportFile, highlight, highlightSync, preloadLanguage } = vi.hoisted(
+class IntersectionObserverMock {
+  observe = vi.fn()
+  disconnect = vi.fn()
+  unobserve = vi.fn()
+}
+Object.defineProperty(globalThis, 'IntersectionObserver', { configurable: true, value: IntersectionObserverMock })
+Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:chatbox-three-runner') })
+
+const { openViewer, openLink, sandboxPersistArtifact, sandboxExportFile, highlight, highlightSync, preloadLanguage } = vi.hoisted(
   () => ({
     openViewer: vi.fn(),
+    openLink: vi.fn(),
     sandboxPersistArtifact: vi.fn(),
     sandboxExportFile: vi.fn(),
     highlight: vi.fn(async () => '<pre class="shiki"><code>highlighted async</code></pre>'),
@@ -38,6 +47,7 @@ vi.mock('@/platform', () => ({
     exporter: { exportByUrl: vi.fn(), exportImageFile: vi.fn() },
     sandboxPersistArtifact,
     sandboxExportFile,
+    openLink,
   },
 }))
 
@@ -243,6 +253,129 @@ $$`}
     const tag = displayMath?.querySelector('.tag')
     expect(displayMath).not.toBeNull()
     expect(tag?.textContent).toContain('(1)')
+  })
+})
+
+describe('search result media in Markdown', () => {
+  const imageResult = {
+    title: 'Northern lights',
+    imageUrl: 'https://images.example.com/full.jpg',
+    thumbnailUrl: 'https://images.example.com/thumb.jpg',
+    sourceUrl: 'https://source.example.com/aurora',
+    source: 'Example',
+    resolution: '1920 x 1080',
+  }
+
+  it('replaces each verified image URL in place and keeps unmatched URLs as links', () => {
+    const second = {
+      ...imageResult,
+      title: 'Mountain',
+      imageUrl: 'https://images.example.com/mountain.jpg',
+      thumbnailUrl: 'https://images.example.com/mountain-thumb.jpg',
+    }
+    render(
+      <Markdown imageSearchResults={[imageResult, second]}>
+        {`First image:\n\n${imageResult.imageUrl}\n\nBetween the images.\n\n${second.imageUrl}\n\nhttps://example.com/not-an-image`}
+      </Markdown>
+    )
+
+    expect(screen.getAllByRole('img').map((image) => image.getAttribute('src'))).toEqual([
+      imageResult.imageUrl,
+      second.imageUrl,
+    ])
+    expect(screen.getByText('Between the images.')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'https://example.com/not-an-image' })).toBeTruthy()
+    expect(screen.queryByTestId('image-search-gallery')).toBeNull()
+  })
+
+  it('falls back to the verified thumbnail and then restores the original URL link', () => {
+    render(<Markdown imageSearchResults={[imageResult]}>{imageResult.imageUrl}</Markdown>)
+    fireEvent.error(screen.getByRole('img', { name: imageResult.title }))
+    expect(screen.getByRole('img', { name: imageResult.title }).getAttribute('src')).toBe(imageResult.thumbnailUrl)
+    fireEvent.error(screen.getByRole('img', { name: imageResult.title }))
+    expect(screen.queryByRole('img', { name: imageResult.title })).toBeNull()
+    expect(screen.getByRole('link', { name: imageResult.imageUrl })).toBeTruthy()
+  })
+
+  it('renders video URLs as in-place cards and plays supported results inside a modal', async () => {
+    const videoResult = {
+      title: 'Bilibili tutorial',
+      url: 'https://www.bilibili.com/video/BV1xx411c7mD',
+      thumbnailUrl: 'https://images.example.com/video.jpg',
+      playbackUrl: 'https://player.bilibili.com/player.html?bvid=BV1xx411c7mD',
+      playbackMode: 'iframe' as const,
+      source: 'bilibili',
+      author: 'Operator',
+      duration: '10:00',
+      publishedDate: '',
+    }
+    render(
+      <MantineProvider>
+        <Markdown videoSearchResults={[videoResult]}>{`Watch here:\n\n${videoResult.url}`}</Markdown>
+      </MantineProvider>
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /Bilibili tutorial/ }))
+    const player = await screen.findByTitle('Bilibili tutorial')
+    expect(player.tagName).toBe('IFRAME')
+    expect(player.getAttribute('src')).toBe(videoResult.playbackUrl)
+  })
+
+  it('labels webpage-only videos and opens their page instead of a player', () => {
+    const videoResult = {
+      title: 'Webpage video',
+      url: 'https://videos.example.com/watch/1',
+      thumbnailUrl: '',
+      playbackUrl: '',
+      playbackMode: 'webpage' as const,
+      source: 'brave.videos',
+      author: '',
+      duration: '',
+      publishedDate: '',
+    }
+    render(
+      <MantineProvider>
+        <Markdown videoSearchResults={[videoResult]}>{videoResult.url}</Markdown>
+      </MantineProvider>
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /Webpage video/ }))
+    expect(openLink).toHaveBeenCalledWith(videoResult.url)
+    expect(screen.queryByTitle('Webpage video')).toBeNull()
+  })
+})
+
+describe('interactive animations in Markdown', () => {
+  it('replaces the exact local animation URL in place with a sandboxed frame', () => {
+    const animation = {
+      animationId: 'energy-1',
+      title: 'Energy conservation',
+      description: 'Potential and kinetic energy exchange.',
+      code: 'api.onFrame(() => {})',
+      height: 360,
+      url: 'https://animation.chatbox.local/energy-1',
+    }
+    render(
+      <MantineProvider>
+        <Markdown threeJsAnimations={[animation]}>{`Before\n\n${animation.url}\n\nAfter`}</Markdown>
+      </MantineProvider>
+    )
+
+    expect(screen.getByText('Before')).toBeTruthy()
+    expect(screen.getByText('After')).toBeTruthy()
+    const frame = screen.getByTitle(animation.title)
+    expect(frame.getAttribute('sandbox')).toBe('allow-scripts')
+    expect(frame.getAttribute('src')).toBe('blob:chatbox-three-runner')
+    expect(screen.queryByRole('link', { name: animation.url })).toBeNull()
+  })
+})
+
+describe('Markdown tables', () => {
+  it('wraps tables in a dedicated horizontal scroller', () => {
+    const { container } = render(<Markdown>{'| Name | Long text |\n| --- | --- |\n| A | one two three |'}</Markdown>)
+    const table = container.querySelector('table')
+    expect(table).not.toBeNull()
+    expect(table?.parentElement?.classList.contains('markdown-table-scroll')).toBe(true)
   })
 })
 

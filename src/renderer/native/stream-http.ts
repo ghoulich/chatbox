@@ -3,7 +3,15 @@ import { type StartStreamOptions, StreamHttp } from 'capacitor-stream-http'
 export type { StartStreamOptions } from 'capacitor-stream-http'
 export { StreamHttp }
 
-export function createNativeReadableStream(options: StartStreamOptions): ReadableStream<Uint8Array> {
+interface NativeStreamLifecycle {
+  onStart?: () => void | Promise<void>
+  onClose?: () => void | Promise<void>
+}
+
+export function createNativeReadableStream(
+  options: StartStreamOptions,
+  lifecycle?: NativeStreamLifecycle
+): ReadableStream<Uint8Array> {
   let streamId: string | null = null
   let removeChunk: (() => void) | null = null
   let removeEnd: (() => void) | null = null
@@ -18,11 +26,15 @@ export function createNativeReadableStream(options: StartStreamOptions): Readabl
     removeChunk = null
     removeEnd = null
     removeError = null
+    const onClose = lifecycle?.onClose
+    lifecycle = undefined
+    if (onClose) void Promise.resolve(onClose()).catch(() => undefined)
   }
 
   return new ReadableStream<Uint8Array>({
     start: async (controller) => {
       try {
+        await lifecycle?.onStart?.()
         // Register listeners first
         removeChunk = (
           await StreamHttp.addListener('chunk', (data) => {

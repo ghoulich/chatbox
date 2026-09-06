@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 
-const { discoverSkillsMock, getSettingsMock, mcpToolsMock, sandboxProviderMock, skillsChangedListeners } = vi.hoisted(
-  () => ({
+const { discoverSkillsMock, getSettingsMock, mcpToolsMock, sandboxProviderMock, skillsChangedListeners, platformType } =
+  vi.hoisted(() => ({
     discoverSkillsMock: vi.fn(),
     getSettingsMock: vi.fn(),
     mcpToolsMock: vi.fn(),
@@ -16,8 +16,8 @@ const { discoverSkillsMock, getSettingsMock, mcpToolsMock, sandboxProviderMock, 
       destroy: vi.fn(),
     },
     skillsChangedListeners: new Set<() => void>(),
-  })
-)
+    platformType: { current: 'web' as 'web' | 'mobile' | 'desktop' },
+  }))
 
 vi.hoisted(() => {
   const storage = {
@@ -37,7 +37,9 @@ vi.hoisted(() => {
 
 vi.mock('@/platform', () => ({
   default: {
-    type: 'web',
+    get type() {
+      return platformType.current
+    },
     getPlatform: vi.fn().mockResolvedValue('darwin'),
     getVersion: vi.fn().mockResolvedValue('test-version'),
   },
@@ -90,6 +92,12 @@ vi.mock('@/packages/skills/controller', () => ({
 vi.mock('@/stores/settingsStore', () => ({
   settingsStore: {
     getState: () => ({
+      interactiveAnimationsEnabled: false,
+      networkTools: {
+        enabled: true,
+        sshProfiles: [],
+        snmpProfiles: [],
+      },
       getSettings: getSettingsMock,
     }),
     setState: vi.fn(),
@@ -175,6 +183,7 @@ function createSession(copilotId?: string): Session {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  platformType.current = 'web'
   for (const listener of skillsChangedListeners) {
     listener()
   }
@@ -1666,6 +1675,32 @@ describe('chat mode memories', () => {
     timestamp: Date.now(),
     contentParts: [{ type: 'text', text: 'You are a pirate copilot.' }],
   }
+
+  test('loads Soul in mobile Chat Mode while preserving the session system prompt', async () => {
+    platformType.current = 'mobile'
+    const prepared = await chatPrepare(
+      {
+        provider: ModelProviderEnum.ChatboxAI,
+        modelId: 'test-model',
+        sessionPromptContextSnapshot: {
+          version: 1,
+          soul: 'Use a calm, precise tone.',
+          memories: [],
+          workspaceInstructions: '',
+          workspaceDirectories: [],
+          capturedAt: 1700000000000,
+          scope: 'chat',
+        },
+      } as SessionSettings,
+      [systemMessage, userMessage]
+    )
+
+    const serialized = JSON.stringify(prepared.coreMessages)
+    expect(serialized).toContain('You are a pirate copilot.')
+    expect(serialized).toContain('You are Chatbox agent')
+    expect(serialized).toContain('Use a calm, precise tone.')
+    expect(serialized).not.toContain('read_file / write_file / edit_file')
+  })
 
   test('injects snapshot memories read-only while keeping the session system prompt', async () => {
     const prepared = await chatPrepare(

@@ -35,4 +35,22 @@ describe('getToolName', () => {
     expect(getToolName('chatbox_cli', { argv: ['help'] })).toBe('Chatbox')
     expect(getToolName('chatbox_cli', { command: '"unterminated' })).toBe('Chatbox')
   })
+
+  it('shows the actually loaded Skill and called MCP server/tool', () => {
+    expect(getToolName('load_skill', { name: 'document-review' })).toBe('Skill · document-review')
+    expect(getToolName('mcp__search-server__web_search', { query: 'test' })).toBe('MCP · search-server · web_search')
+  })
+
+  it('uses a localized display name for image search', () => {
+    expect(getToolName('image_search')).toBe('Image Search')
+    expect(getToolName('video_search')).toBe('Video Search')
+    expect(getToolName('create_threejs_animation')).toBe('Interactive Animation')
+  })
+
+  it('uses localized names for local network tools', () => {
+    expect(getToolName('net_info')).toBe('Network Information')
+    expect(getToolName('tcp_ping')).toBe('TCP Ping')
+    expect(getToolName('ssh')).toBe('SSH Command')
+    expect(getToolName('snmp_walk')).toBe('SNMP Walk')
+  })
 })

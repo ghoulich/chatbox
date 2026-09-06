@@ -1,6 +1,10 @@
 import { CapacitorHttp } from '@capacitor/core'
+import { startBackgroundGeneration, stopBackgroundGeneration } from '@/native/background-generation'
 import { createNativeReadableStream } from '@/native/stream-http'
+import { settingsStore } from '@/stores/settingsStore'
 import { ApiError } from '../../shared/models/errors'
+
+let backgroundGenerationWarningShown = false
 
 function isLockedStreamCancelError(error: unknown): boolean {
   return (
@@ -25,19 +29,65 @@ export function cancelReadableStreamOnAbort(stream: ReadableStream<Uint8Array>) 
   }
 }
 
+export function isStreamingRequestBody(body: RequestInit['body'] | undefined): body is string {
+  if (typeof body !== 'string') return false
+  try {
+    return JSON.parse(body).stream === true
+  } catch {
+    return false
+  }
+}
+
+async function collectNativeResponse(
+  url: string,
+  method: string,
+  headers: Record<string, string>,
+  body?: RequestInit['body'],
+  signal?: AbortSignal,
+): Promise<Response> {
+  const stream = createNativeReadableStream({
+    url,
+    method,
+    headers,
+    body: typeof body === 'string' ? body : undefined,
+  })
+  let removeAbortListener: () => void = () => undefined
+
+  if (signal) {
+    const onAbort = () => cancelReadableStreamOnAbort(stream)
+    if (signal.aborted) onAbort()
+    else {
+      signal.addEventListener('abort', onAbort, { once: true })
+      removeAbortListener = () => signal.removeEventListener('abort', onAbort)
+    }
+  }
+
+  try {
+    const responseData = await new Response(stream).text()
+    return new Response(responseData, {
+      // The current StreamHttp bridge does not expose response metadata. Model
+      // SDKs still validate and surface JSON error payloads from the provider.
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  } finally {
+    removeAbortListener()
+  }
+}
+
 export async function handleMobileRequest(
   url: string,
   method: string,
   headers: Headers,
   body?: RequestInit['body'],
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<Response> {
   // Fix: Convert Headers to plain object without using .entries()
   const headerObj: Record<string, string> = {}
   headers.forEach((value, key) => {
     headerObj[key] = value
   })
-  const isStreaming = body && typeof body === 'string' && JSON.parse(body).stream === true
+  const isStreaming = isStreamingRequestBody(body)
 
   if (isStreaming) {
     try {
@@ -47,12 +97,59 @@ export async function handleMobileRequest(
         Accept: 'text/event-stream',
       }
 
-      const stream = createNativeReadableStream({
-        url,
-        method,
-        headers: streamHeaders,
-        body: body as string,
-      })
+      const keepRunningInBackground = settingsStore.getState().backgroundGenerationEnabled !== false
+      const backgroundTaskId = `model-stream-${Date.now()}-${Math.random().toString(36).slice(2)}`
+      let removeAbortListener: () => void = () => undefined
+
+      const stream = createNativeReadableStream(
+        {
+          url,
+          method,
+          headers: streamHeaders,
+          body,
+        },
+        {
+          // Background execution is an enhancement. If a device or OEM policy
+          // rejects the foreground service, keep the model stream working in the
+          // foreground instead of failing the entire conversation.
+          onStart: keepRunningInBackground
+            ? async () => {
+                try {
+                  await startBackgroundGeneration(backgroundTaskId)
+                  backgroundGenerationWarningShown = false
+                } catch (error) {
+                  console.warn('Background generation unavailable; continuing without it', error)
+                  if (!backgroundGenerationWarningShown) {
+                    backgroundGenerationWarningShown = true
+                    try {
+                      // Load UI notification dependencies only after a real
+                      // failure. Importing the UI store from this low-level
+                      // request module during app bootstrap can create a module
+                      // initialization cycle and leave the WebView blank.
+                      const [{ t }, toastActions] = await Promise.all([
+                        import('i18next'),
+                        import('@/stores/toastActions'),
+                      ])
+                      toastActions.add(
+                        t(
+                          'Background protection could not start. This response will continue only while Chatbox remains active. Check Android battery and notification settings.',
+                        ),
+                        10000,
+                        { label: t('Settings'), settingsPath: '/settings/chat' },
+                      )
+                    } catch (notificationError) {
+                      console.warn('Unable to show background generation warning', notificationError)
+                    }
+                  }
+                }
+              }
+            : undefined,
+          onClose: () => {
+            removeAbortListener()
+            if (keepRunningInBackground) return stopBackgroundGeneration(backgroundTaskId)
+          },
+        },
+      )
 
       // Handle abort signal for stream cancellation
       if (signal) {
@@ -60,7 +157,10 @@ export async function handleMobileRequest(
           cancelReadableStreamOnAbort(stream)
         }
         if (signal.aborted) onAbort()
-        else signal.addEventListener('abort', onAbort, { once: true })
+        else {
+          signal.addEventListener('abort', onAbort, { once: true })
+          removeAbortListener = () => signal.removeEventListener('abort', onAbort)
+        }
       }
 
       // TODO: Once native plugin supports returning status/headers,
@@ -77,17 +177,34 @@ export async function handleMobileRequest(
     }
   }
 
-  const response = await CapacitorHttp.request({
-    url,
-    method,
-    headers: headerObj,
-    data: body,
-    responseType: 'text',
-  })
+  let response
+  try {
+    response = await CapacitorHttp.request({
+      url,
+      method,
+      headers: headerObj,
+      data: body,
+      responseType: 'text',
+    })
+  } catch (error) {
+    // CapacitorHttp installs its own SSL socket factory on Android. On devices
+    // using a user-installed CA for a private model endpoint that can reject a
+    // certificate which the app's network security config explicitly trusts.
+    // StreamHttp uses Android's normal HttpURLConnection trust configuration,
+    // which is also the proven path used by streaming chat requests.
+    console.warn('Buffered CapacitorHttp request failed; retrying through native HTTP', error)
+    return collectNativeResponse(url, method, headerObj, body, signal)
+  }
 
   const rawData = typeof response.data === 'string' ? response.data : JSON.stringify(response.data)
-  // Treat status 0 or < 200 as errors, in addition to >= 400
-  if (response.status === 0 || response.status < 200 || response.status >= 400) {
+  // CapacitorHttp reports some Android TLS/network failures as a synthetic
+  // status-0 response instead of rejecting its promise. Retry that shape via
+  // the same user-CA-aware native path used above.
+  if (response.status === 0) {
+    console.warn('Buffered CapacitorHttp request returned status 0; retrying through native HTTP')
+    return collectNativeResponse(url, method, headerObj, body, signal)
+  }
+  if (response.status < 200 || response.status >= 400) {
     throw new ApiError(`Status Code ${response.status}`, rawData, response.status)
   }
   const responseData = rawData

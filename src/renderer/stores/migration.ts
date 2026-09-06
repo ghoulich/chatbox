@@ -151,7 +151,7 @@ async function migrateStorage() {
     needMigration = true
   }
 
-  const [oldConfigVersion, oldStorage] = await findNewestStorage(getOldVersionStorages())
+  const [oldConfigVersion, oldStorage] = await findNewestStorage(getOldVersionStorages(platform.type))
 
   if (!needMigration) {
     log.info(

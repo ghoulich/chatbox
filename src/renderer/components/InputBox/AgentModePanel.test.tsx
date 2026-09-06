@@ -36,7 +36,7 @@ const mocks = vi.hoisted(() => {
     licenseKey: '',
     memoryEnabled: true,
     skills: {
-      enabledSkillNames: [],
+      enabledSkillNames: [] as string[],
     },
     setSettings: vi.fn(),
   }
@@ -61,6 +61,7 @@ const mocks = vi.hoisted(() => {
   const trackWebSearchClickMock = vi.fn()
   const trackMemoryClickMock = vi.fn()
   const setSessionAgentModeMock = vi.fn()
+  const discoverSkillsMock = vi.fn(() => new Promise<Array<{ name: string; description: string }>>(() => {}))
   const listMemoriesMock = vi.fn(() => new Promise<Array<{ id: string; content: string; createdAt: number }>>(() => {}))
   const listCopilotMemoriesMock = vi.fn(
     (_copilotId: string) => new Promise<Array<{ id: string; content: string; createdAt: number }>>(() => {})
@@ -79,6 +80,7 @@ const mocks = vi.hoisted(() => {
     addOrUpdateCopilotMock,
     agentModeEntry,
     copilotMemoryOwners,
+    discoverSkillsMock,
     featureFlags,
     knowledgeBases,
     listCopilotMemoriesMock,
@@ -149,7 +151,7 @@ vi.mock('@/packages/navigator', () => ({
 
 vi.mock('@/packages/skills/controller', () => ({
   skillsController: {
-    discoverSkills: vi.fn(() => new Promise(() => {})),
+    discoverSkills: mocks.discoverSkillsMock,
   },
   subscribeSkillsChanged: () => vi.fn(),
 }))
@@ -225,6 +227,7 @@ beforeEach(() => {
   mocks.settingsState.extension.webSearch.tavilyApiKey = ''
   mocks.settingsState.licenseKey = ''
   mocks.settingsState.memoryEnabled = true
+  mocks.settingsState.skills.enabledSkillNames = []
   mocks.listMemoriesMock.mockImplementation(() => new Promise(() => {}))
   mocks.listCopilotMemoriesMock.mockImplementation(() => new Promise(() => {}))
   mocks.myCopilots.splice(0)
@@ -814,6 +817,51 @@ describe('AgentModePanel touch layout', () => {
 })
 
 describe('AgentModePanel platform-unavailable capabilities', () => {
+  test('counts only enabled Skills that are currently discoverable', async () => {
+    mocks.platform.type = 'mobile'
+    mocks.platform.isDesktopLike = false
+    mocks.agentModeEntry.value = 'off'
+    mocks.settingsState.skills.enabledSkillNames = [
+      'chatbox-product-info',
+      'vibedrop',
+      'network-operations',
+      'searxng-search-skill',
+    ]
+    mocks.discoverSkillsMock.mockResolvedValueOnce([
+      { name: 'network-operations', description: 'Network tools' },
+      { name: 'searxng-search-skill', description: 'Search policy' },
+    ])
+
+    renderPanel({ layout: 'touch', modelSupportsAgentMode: false })
+
+    await screen.findByText('2')
+    const skillsRow = screen.getByRole('button', { name: /^Skills/ })
+    expect(skillsRow.textContent).toContain('2')
+
+    fireEvent.click(skillsRow)
+    expect(screen.getByText('/network-operations')).toBeTruthy()
+    expect(screen.getByText('/searxng-search-skill')).toBeTruthy()
+    expect(screen.queryByText('/chatbox-product-info')).toBeNull()
+    expect(screen.queryByText('/vibedrop')).toBeNull()
+  })
+
+  test('enables Skills and remote MCP in mobile Chat Mode', () => {
+    mocks.platform.type = 'mobile'
+    mocks.platform.isDesktopLike = false
+    mocks.agentModeEntry.value = 'off'
+    mocks.featureFlags.knowledgeBase = false
+    renderPanel({ layout: 'touch', modelSupportsAgentMode: false })
+
+    expect(screen.getByRole('button', { name: 'Skills' }).getAttribute('aria-disabled')).toBe('false')
+    expect(screen.getByRole('button', { name: 'MCP' }).getAttribute('aria-disabled')).toBe('false')
+    expect(screen.getByRole('button', { name: /^Code Execution/ }).getAttribute('aria-disabled')).toBe('true')
+    expect(
+      screen.getByText(
+        'Skills and remote MCP are available in Chat Mode. Code execution and Working Directory require the desktop app.'
+      )
+    ).toBeTruthy()
+  })
+
   test('hides desktop-only capability rows and explains they need the desktop app', () => {
     mocks.platform.type = 'mobile'
     mocks.platform.isDesktopLike = false

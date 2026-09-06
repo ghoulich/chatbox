@@ -90,6 +90,24 @@
 }
 
 /* // markdown table */
+.msg-block .markdown-table-scroll {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.msg-block .markdown-table-scroll table {
+  width: max-content;
+  min-width: 100%;
+}
+
+.msg-block .markdown-table-scroll th,
+.msg-block .markdown-table-scroll td {
+  white-space: pre;
+}
+
 html[data-theme="light"] .msg-block {
   table {
     background-color: #f8f8f8;

@@ -29,7 +29,7 @@ vi.mock('@/app/renderer-application', () => ({
   },
 }))
 vi.mock('@/platform', () => ({
-  default: { isDesktopLike: true, getSessionAttachmentRagController: () => ragControllerMock },
+  default: { type: 'desktop', isDesktopLike: true, getSessionAttachmentRagController: () => ragControllerMock },
 }))
 vi.mock('./action-guard', () => ({ guardSessionAction: guardSessionActionMock }))
 vi.mock('@/adapters', () => ({ createModel: vi.fn() }))

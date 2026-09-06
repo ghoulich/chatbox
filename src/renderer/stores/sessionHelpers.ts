@@ -25,6 +25,7 @@ import * as localParser from '@/packages/local-parser'
 import * as remote from '@/packages/remote'
 import { estimateTokens } from '@/packages/token'
 import platform from '@/platform'
+import { supportsSessionAttachmentRag } from '@/platform/session-attachment-rag/support'
 import storage from '@/storage'
 import { StorageKeyGenerator } from '@/storage/StoreStorage'
 import { authInfoStore } from '@/stores/authInfoStore'
@@ -45,6 +46,7 @@ export {
   isSessionAttachmentRagAuthError,
   isSessionAttachmentRagIndexingError,
   SESSION_ATTACHMENT_RAG_LARGE_ATTACHMENT_WARNING,
+  SESSION_ATTACHMENT_RAG_INDEXING_FAILED_ERROR,
   SESSION_ATTACHMENT_RAG_PARSED_CONTENT_TOO_LARGE_ERROR,
   SESSION_ATTACHMENT_RAG_REQUIRES_CHATBOX_AI_ERROR,
   SESSION_ATTACHMENT_RAG_REQUIRES_KNOWLEDGE_BASE_ERROR,
@@ -60,7 +62,7 @@ export async function getMetaStorage() {
 const log = getLogger('session-helpers')
 const FILE_STORAGE_QUOTA_EXCEEDED_ERROR = 'file_storage_quota_exceeded'
 const FILE_PREPROCESS_FAILED_ERROR = 'file_preprocess_failed'
-const SESSION_ATTACHMENT_RAG_INLINE_BYTE_THRESHOLD = 256 * 1024
+export const SESSION_ATTACHMENT_RAG_INLINE_BYTE_THRESHOLD = 256 * 1024
 export const SESSION_ATTACHMENT_RAG_MAX_PARSED_BYTE_LENGTH = 6 * 1024 * 1024
 let sessionRagCapabilityCache:
   | {
@@ -594,10 +596,13 @@ async function analyzePickedAsset(input: {
   }
 
   const isSessionAttachmentRagFileType = isSessionAttachmentRagSupportedFilePath(asset.name)
+  const attachmentProcessingMode = settingsStore.getState().sessionAttachmentProcessingMode ?? 'auto'
   const exceedsSessionAttachmentRagThreshold =
-    platform.isDesktopLike &&
+    supportsSessionAttachmentRag(platform.type) &&
     isSessionAttachmentRagFileType &&
-    stats.byteLength > SESSION_ATTACHMENT_RAG_INLINE_BYTE_THRESHOLD
+    attachmentProcessingMode !== 'inline' &&
+    (attachmentProcessingMode === 'retrieval' ||
+      (attachmentProcessingMode === 'auto' && stats.byteLength > SESSION_ATTACHMENT_RAG_INLINE_BYTE_THRESHOLD))
   const sessionAttachmentRagAllowed = exceedsSessionAttachmentRagThreshold ? await canUseSessionAttachmentRag() : false
   const shouldUseSessionAttachmentRag =
     exceedsSessionAttachmentRagThreshold && sessionAttachmentRagAllowed && !sessionAttachmentWarningReason
@@ -607,7 +612,7 @@ async function analyzePickedAsset(input: {
   })
 
   log.debug(
-    `${SESSION_ATTACHMENT_RAG_LOG_PREFIX} Preprocess decision: file="${asset.name}", parser=${parserType ?? 'unknown'}, bytes=${stats.byteLength}, tokens=${tokenCountMap[TOKEN_CACHE_KEYS.default] ?? 0}, ragFileType=${isSessionAttachmentRagFileType}, exceedsThreshold=${exceedsSessionAttachmentRagThreshold}, ragMode=${shouldUseSessionAttachmentRag ? 'session-retrieval' : 'inline'}, allowed=${sessionAttachmentRagAllowed}`
+    `${SESSION_ATTACHMENT_RAG_LOG_PREFIX} Preprocess decision: file="${asset.name}", parser=${parserType ?? 'unknown'}, bytes=${stats.byteLength}, tokens=${tokenCountMap[TOKEN_CACHE_KEYS.default] ?? 0}, processingMode=${attachmentProcessingMode}, ragFileType=${isSessionAttachmentRagFileType}, exceedsThreshold=${exceedsSessionAttachmentRagThreshold}, ragMode=${shouldUseSessionAttachmentRag ? 'session-retrieval' : 'inline'}, allowed=${sessionAttachmentRagAllowed}`
   )
 
   return {

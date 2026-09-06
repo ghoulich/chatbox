@@ -42,6 +42,8 @@ export interface SessionNameGenerationOptions {
   messages?: Message[]
   /** Live-conversation identity so a later thread can schedule while an older request is in flight. */
   threadIdentity?: string
+  /** A non-Untitled placeholder (currently a copilot name) that may be replaced by the generated topic. */
+  expectedSessionName?: string
 }
 
 const NAME_GENERATION_IDLE_COOLDOWN_MS = 60_000
@@ -74,17 +76,16 @@ export class SessionNamingService {
   }
 
   scheduleNameAndThreadName(sessionId: string, options: SessionNameGenerationOptions = {}): void {
+    const expectedName = options.expectedSessionName ?? UNTITLED_SESSION_NAME
+    const isEligible = (session: Session) =>
+      session.name === expectedName &&
+      (expectedName === UNTITLED_SESSION_NAME || Boolean(session.copilotId && !session.threadName)) &&
+      hasContentForAutoTitle(session.messages)
     this.schedule(
       buildNameGenerationAttemptKey('name', sessionId, options.threadIdentity),
       sessionId,
-      (session) => session.name === UNTITLED_SESSION_NAME && hasContentForAutoTitle(session.messages),
-      () =>
-        this.generate(
-          sessionId,
-          'name-and-thread',
-          options.locale,
-          (session) => session.name === UNTITLED_SESSION_NAME && hasContentForAutoTitle(session.messages)
-        ),
+      isEligible,
+      () => this.generate(sessionId, 'name-and-thread', options.locale, isEligible),
       options.messages,
       options.threadIdentity
     )
@@ -131,7 +132,10 @@ export class SessionNamingService {
     const action = resolveAutoTitleAction(session)
     const nextOptions = { ...options, threadIdentity: getCurrentThreadNamingIdentity(session) }
     if (action === 'session-and-thread') {
-      this.scheduleNameAndThreadName(session.id, nextOptions)
+      this.scheduleNameAndThreadName(session.id, {
+        ...nextOptions,
+        ...(session.name !== UNTITLED_SESSION_NAME ? { expectedSessionName: session.name } : {}),
+      })
     } else if (action === 'thread') {
       this.scheduleThreadName(session.id, nextOptions)
     }

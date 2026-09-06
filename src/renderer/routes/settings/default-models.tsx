@@ -1,5 +1,5 @@
 /** biome-ignore-all lint/style/noNonNullAssertion: <todo> */
-import { Flex, Stack, Text, Title } from '@mantine/core'
+import { Button, Flex, Select, Stack, Text, Textarea, Title } from '@mantine/core'
 import { TestId } from '@shared/automation/testids'
 import { SystemProviders } from '@shared/defaults'
 import { IconSelector } from '@tabler/icons-react'
@@ -10,6 +10,10 @@ import { ScalableIcon } from '@/components/common/ScalableIcon'
 import ModelSelector from '@/components/ModelSelector'
 import { enrichModelsFromRegistry, useModelRegistryVersion } from '@/packages/model-registry'
 import { useSettingsStore } from '@/stores/settingsStore'
+import {
+  getDefaultVisionAnalysisPrompt,
+  VISION_USER_QUESTION_PLACEHOLDER,
+} from '@/stores/session/vision-analysis-prompt'
 import { isEmbeddingModel, isRerankModel } from './-defaultModelFilters'
 
 export const Route = createFileRoute('/settings/default-models')({
@@ -169,6 +173,69 @@ export function RouteComponent() {
         <Text c="chatbox-tertiary" size="xs">
           {t('Chatbox OCRs images with this model and sends the text to models without image support.')}
         </Text>
+
+        <Text fw={500} size="sm" mt="xs">
+          {t('Vision Analysis Prompt')}
+        </Text>
+        <Textarea
+          value={settings.visionAnalysisPrompt ?? getDefaultVisionAnalysisPrompt(settings.language)}
+          autosize
+          minRows={8}
+          maxRows={18}
+          onChange={(event) => setSettings({ visionAnalysisPrompt: event.currentTarget.value })}
+        />
+        <Text c="chatbox-tertiary" size="xs">
+          {t('The USER_QUESTION placeholder is replaced with the text from the same image message.')}{' '}
+          <Text span ff="monospace">
+            {VISION_USER_QUESTION_PLACEHOLDER}
+          </Text>
+        </Text>
+        <Button
+          variant="subtle"
+          color="chatbox-gray"
+          onClick={() => setSettings({ visionAnalysisPrompt: undefined })}
+          px={3}
+          py={6}
+          className="self-start"
+        >
+          {t('Reset to Default')}
+        </Button>
+      </Stack>
+
+      <Stack gap="xs">
+        <Text fw={600}>{t('Session Attachment Processing')}</Text>
+        <Select
+          value={settings.sessionAttachmentProcessingMode ?? 'auto'}
+          allowDeselect={false}
+          data={[
+            { value: 'auto', label: t('Automatic (Recommended)') },
+            { value: 'inline', label: t('Inline Full Text') },
+            { value: 'retrieval', label: t('Embedding Retrieval') },
+          ]}
+          onChange={(value) =>
+            setSettings({
+              sessionAttachmentProcessingMode: (value ?? 'auto') as 'auto' | 'inline' | 'retrieval',
+            })
+          }
+        />
+        <Text c="chatbox-tertiary" size="xs">
+          {settings.sessionAttachmentProcessingMode === 'retrieval'
+            ? t(
+                'Split conversation attachments into searchable chunks. The configured embedding model builds and searches the index; the configured reranking model refines matching chunks.'
+              )
+            : settings.sessionAttachmentProcessingMode === 'inline'
+              ? t('Send the full parsed attachment text directly to the chat model without embedding or reranking.')
+              : t(
+                  'Automatically use embedding retrieval for supported large attachments on every platform; otherwise send the full parsed text inline.'
+                )}
+        </Text>
+        {settings.sessionAttachmentProcessingMode === 'retrieval' &&
+          !settings.defaultEmbeddingModel &&
+          !settings.licenseKey && (
+            <Text c="red" size="xs">
+              {t('Embedding retrieval requires a configured embedding model or an active Chatbox AI license.')}
+            </Text>
+          )}
       </Stack>
 
       <Stack gap="xs">

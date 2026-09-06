@@ -119,6 +119,19 @@ describe('resolveAutoTitleAction', () => {
     ).toBe('thread')
   })
 
+  it('replaces a copilot placeholder name with a topic title after the first reply', () => {
+    expect(
+      resolveAutoTitleAction(
+        session({
+          name: 'Research Partner',
+          threadName: '',
+          copilotId: 'research-partner',
+          messages: firstTurn,
+        })
+      )
+    ).toBe('session-and-thread')
+  })
+
   it('leaves historical missing threadName to backfill instead of the model', () => {
     expect(
       resolveAutoTitleAction(

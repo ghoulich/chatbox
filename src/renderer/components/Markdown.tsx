@@ -1,5 +1,8 @@
 import { sanitizeUrl } from '@braintree/sanitize-url'
 import { useTheme } from '@mui/material'
+import type { ImageSearchResultItem } from '@shared/image-search-tool'
+import type { ThreeJsAnimationResult } from '@shared/threejs-animation-tool'
+import type { VideoSearchResultItem } from '@shared/video-search-tool'
 import type { Code, Root } from 'mdast'
 import {
   type ComponentProps,
@@ -67,6 +70,8 @@ import { ImageViewer, ImageViewerItem } from './ImageViewer'
 import IconDart from './icons/Dart'
 import IconJava from './icons/Java'
 import { MessageMermaid, SVGPreview } from './Mermaid'
+import { InlineImageSearchResult, InlineVideoSearchResult } from './message-parts/InlineSearchMedia'
+import { InlineThreeJsAnimation } from './message-parts/InlineThreeJsAnimation'
 import { SandboxFileLink } from './message-parts/SandboxFileLink'
 import { parseSandboxLinkHref } from './message-parts/sandbox-link'
 import { type StreamingTextSegment, useStreamingTextSegments, wrapStreamingSegmentsInHast } from './streaming-text-fade'
@@ -133,6 +138,9 @@ function Markdown(props: {
   forceColorScheme?: 'light' | 'dark'
   onCodeCopy?: () => void
   onPreviewWebpage?: () => void
+  imageSearchResults?: ImageSearchResultItem[]
+  videoSearchResults?: VideoSearchResultItem[]
+  threeJsAnimations?: ThreeJsAnimationResult[]
 }) {
   const {
     children,
@@ -147,6 +155,9 @@ function Markdown(props: {
     forceColorScheme,
     onCodeCopy,
     onPreviewWebpage,
+    imageSearchResults = [],
+    videoSearchResults = [],
+    threeJsAnimations = [],
   } = props
 
   const processedChildren = useMemo(
@@ -165,6 +176,22 @@ function Markdown(props: {
     () =>
       streamingSegments.length > 0 ? [rehypeKatex, [rehypeWrapStreamingSegments, streamingSegments]] : [rehypeKatex],
     [streamingSegments]
+  )
+  const imageSearchResultsByUrl = useMemo(() => {
+    const results = new Map<string, ImageSearchResultItem>()
+    for (const result of imageSearchResults) {
+      results.set(result.imageUrl, result)
+      if (result.thumbnailUrl) results.set(result.thumbnailUrl, result)
+    }
+    return results
+  }, [imageSearchResults])
+  const videoSearchResultsByUrl = useMemo(
+    () => new Map(videoSearchResults.map((result) => [result.url, result])),
+    [videoSearchResults]
+  )
+  const threeJsAnimationsByUrl = useMemo(
+    () => new Map(threeJsAnimations.map((animation) => [animation.url, animation])),
+    [threeJsAnimations]
   )
 
   return (
@@ -208,6 +235,12 @@ function Markdown(props: {
                   </SandboxFileLink>
                 )
               }
+              const imageSearchResult = href ? imageSearchResultsByUrl.get(href) : undefined
+              if (imageSearchResult) return <InlineImageSearchResult result={imageSearchResult} />
+              const videoSearchResult = href ? videoSearchResultsByUrl.get(href) : undefined
+              if (videoSearchResult) return <InlineVideoSearchResult result={videoSearchResult} />
+              const threeJsAnimation = href ? threeJsAnimationsByUrl.get(href) : undefined
+              if (threeJsAnimation) return <InlineThreeJsAnimation result={threeJsAnimation} />
               return (
                 <a
                   {...props}
@@ -223,6 +256,11 @@ function Markdown(props: {
               )
             },
             img: ({ node, ...props }) => <MarkdownImage {...props} />,
+            table: ({ node, ...props }) => (
+              <div className="markdown-table-scroll">
+                <table {...props} />
+              </div>
+            ),
           }),
           [
             uniqueId,
@@ -234,6 +272,9 @@ function Markdown(props: {
             forceColorScheme,
             onCodeCopy,
             onPreviewWebpage,
+            imageSearchResultsByUrl,
+            videoSearchResultsByUrl,
+            threeJsAnimationsByUrl,
           ]
         )}
       >

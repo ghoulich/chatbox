@@ -3,6 +3,7 @@ export const SESSION_ATTACHMENT_RAG_REQUIRES_KNOWLEDGE_BASE_ERROR = 'session_att
 export const SESSION_ATTACHMENT_RAG_REQUIRES_TOOL_USE_MODEL_ERROR = 'session_attachment_rag_requires_tool_use_model'
 export const SESSION_ATTACHMENT_RAG_PARSED_CONTENT_TOO_LARGE_ERROR = 'session_attachment_rag_parsed_content_too_large'
 export const SESSION_ATTACHMENT_RAG_LARGE_ATTACHMENT_WARNING = 'session_attachment_rag_large_attachment_warning'
+export const SESSION_ATTACHMENT_RAG_INDEXING_FAILED_ERROR = 'session_attachment_rag_indexing_failed'
 
 const SESSION_ATTACHMENT_RAG_AUTH_ERROR_PATTERNS = [
   'provider chatbox-ai not set',
@@ -11,6 +12,7 @@ const SESSION_ATTACHMENT_RAG_AUTH_ERROR_PATTERNS = [
 ]
 
 const SESSION_ATTACHMENT_RAG_INDEXING_ERROR_PATTERNS = [
+  SESSION_ATTACHMENT_RAG_INDEXING_FAILED_ERROR,
   'ai_provider_error',
   'chatbox_session_rag_vectors.db',
   'connectionfailed("unable to open connection to local database',

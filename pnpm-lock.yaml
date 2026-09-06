@@ -101,6 +101,9 @@ importers:
       sanitize-filename:
         specifier: ^1.6.3
         version: 1.6.3
+      three:
+        specifier: ^0.185.1
+        version: 0.185.1
       ua-parser-js:
         specifier: ^2.0.10
         version: 2.0.10
@@ -12902,6 +12905,9 @@ packages:
 
   thread-stream@3.1.0:
     resolution: {integrity: sha512-OqyPZ9u96VohAyMfJykzmivOrY2wfMSf3C5TtFJVgN+Hm6aj+voFhlK+kZEIv2FBh1X6Xp3DlnCOfEQ3B2J86A==}
+
+  three@0.185.1:
+    resolution: {integrity: sha512-5aojFCXKwnjBRZvUnt3WFfEcvUJgkN5LlijRFN95hMy8WVkG4I0QNcJE+OuWvuJ0bOdStrbfXn0pkd6/QyiAlg==}
 
   throttle-debounce@5.0.2:
     resolution: {integrity: sha512-B71/4oyj61iNH0KeCamLuE2rmKuTO5byTOSVwECM5FA7TiAiAW+UqTKZ9ERueC4qvgSttUhdmq1mXC3kJqGX7A==}
@@ -29121,6 +29127,8 @@ snapshots:
   thread-stream@3.1.0:
     dependencies:
       real-require: 0.2.0
+
+  three@0.185.1: {}
 
   throttle-debounce@5.0.2: {}
 

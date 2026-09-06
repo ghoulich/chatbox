@@ -285,6 +285,24 @@ describe('SessionNamingService', () => {
     expect(harness.chat).not.toHaveBeenCalled()
   })
 
+  test('syncAutoTitle replaces a copilot placeholder in both visible and thread titles', async () => {
+    const harness = createHarness()
+    harness.setSession(
+      createSession({
+        name: 'Research Partner',
+        threadName: '',
+        copilotId: 'research-partner',
+      })
+    )
+
+    harness.service.syncAutoTitle(harness.session!)
+    expect(harness.scheduled).toHaveLength(1)
+
+    harness.scheduled[0].callback()
+    await vi.waitFor(() => expect(harness.session?.name).toBe('北京旅行计划'))
+    expect(harness.session?.threadName).toBe('北京旅行计划')
+  })
+
   test('syncAutoTitle schedules Untitled naming and skips when the setting is off', () => {
     const harness = createHarness()
     harness.service.syncAutoTitle(harness.session!)

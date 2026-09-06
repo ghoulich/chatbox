@@ -36,6 +36,11 @@ function credentialSettings(): Settings {
         bochaApiKey: 'bocha-key',
         queritApiKey: 'querit-key',
         queritMaxResults: 5,
+        searxngBaseUrl: 'https://search.example.com',
+        searxngAuthType: 'basic',
+        searxngUsername: 'alice',
+        searxngPassword: 'searxng-password',
+        searxngBearerToken: 'searxng-token',
       },
       documentParser: { type: 'mineru', mineru: { apiToken: 'extension-mineru-token' } },
     },
@@ -81,7 +86,13 @@ describe('cleanSettingsForBackup', () => {
       },
     ])
     expect(cleaned.extension).toEqual({
-      webSearch: { provider: 'tavily', queritMaxResults: 5 },
+      webSearch: {
+        provider: 'tavily',
+        queritMaxResults: 5,
+        searxngBaseUrl: 'https://search.example.com',
+        searxngAuthType: 'basic',
+        searxngUsername: 'alice',
+      },
       documentParser: { type: 'mineru' },
     })
     expect(cleaned.mcp).toEqual({
@@ -114,7 +125,11 @@ describe('cleanSettingsForBackup', () => {
       providers: { provider: { apiKey: 'api-key', oauth: { accessToken: 'access-token' } } },
       customProviders: [{ defaultSettings: { apiKey: 'default-api-key' } }],
       extension: {
-        webSearch: { tavilyApiKey: 'tavily-key' },
+        webSearch: {
+          tavilyApiKey: 'tavily-key',
+          searxngPassword: 'searxng-password',
+          searxngBearerToken: 'searxng-token',
+        },
         documentParser: { mineru: { apiToken: 'extension-mineru-token' } },
       },
       mcp: {

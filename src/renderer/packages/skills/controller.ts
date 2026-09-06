@@ -1,5 +1,8 @@
 import type { MarketplaceSkill, SkillInfo, SkillMetadata } from '@shared/types/skills'
 import type { UserExecApprovalSource } from '@shared/types/user-exec'
+import platform from '@/platform'
+import { settingsStore } from '@/stores/settingsStore'
+import { clearMobileSkillsCache, discoverMobileSkills, loadMobileSkill } from './mobile-directory'
 
 interface SkillScriptResult {
   success: boolean
@@ -27,6 +30,7 @@ interface SkillUpdateResult {
 const skillsChangeListeners = new Set<() => void>()
 
 export function notifySkillsChanged(): void {
+  if (platform.type === 'mobile') clearMobileSkillsCache()
   for (const listener of skillsChangeListeners) {
     listener()
   }
@@ -41,12 +45,18 @@ export function subscribeSkillsChanged(listener: () => void): () => void {
 
 export const skillsController = {
   discoverSkills(): Promise<SkillInfo[]> {
+    if (platform.type === 'mobile') {
+      return discoverMobileSkills(settingsStore.getState().skills.mobileDirectoryUri)
+    }
     return window.electronAPI.invoke('skills:discover')
   },
 
   loadSkill(
     name: string
   ): Promise<{ metadata: SkillMetadata; body: string; skillRoot?: string; files?: string[] } | null> {
+    if (platform.type === 'mobile') {
+      return loadMobileSkill(settingsStore.getState().skills.mobileDirectoryUri, name)
+    }
     return window.electronAPI.invoke('skills:load', name)
   },
 

@@ -158,6 +158,37 @@ function createLegacyStdioFixture(): ScriptedTransport {
   })
 }
 
+describe('mcpController tool exposure', () => {
+  afterEach(() => {
+    mcpController.servers.clear()
+  })
+
+  it('can expose only remote HTTP/SSE server tools on mobile', () => {
+    const remoteInstance = { getAvailableTools: () => ({ remote_tool: { execute: vi.fn() } }) }
+    const localInstance = { getAvailableTools: () => ({ local_tool: { execute: vi.fn() } }) }
+    mcpController.servers.set('remote', {
+      instance: remoteInstance as unknown as MCPServer,
+      config: {
+        id: 'remote',
+        name: 'Remote',
+        enabled: true,
+        transport: { type: 'http', url: 'https://example.com/mcp' },
+      },
+    })
+    mcpController.servers.set('local', {
+      instance: localInstance as unknown as MCPServer,
+      config: {
+        id: 'local',
+        name: 'Local',
+        enabled: true,
+        transport: { type: 'stdio', command: 'local-mcp', args: [] },
+      },
+    })
+
+    expect(Object.keys(mcpController.getAvailableTools({ remoteOnly: true }))).toEqual(['mcp__remote__remote_tool'])
+  })
+})
+
 describe('MCPServer HTTP transport', () => {
   afterEach(() => {
     vi.restoreAllMocks()

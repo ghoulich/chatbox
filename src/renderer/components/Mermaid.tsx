@@ -127,7 +127,7 @@ export function MermaidSVGPreviewDangerous(props: {
   }
   return (
     <div
-      className={cn('cursor-pointer my-2', className)}
+      className={cn('mermaid-diagram-container cursor-pointer my-2', className)}
       onClick={async () => {
         const svg = document.getElementById(svgId)
         if (!svg) {

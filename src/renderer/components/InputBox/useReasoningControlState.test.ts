@@ -1,40 +1,61 @@
-import { ModelProviderType, type ProviderInfo } from '@shared/types'
-import { describe, expect, it } from 'vitest'
-import { resolveReasoningModelInfo } from './useReasoningControlState'
+// @vitest-environment jsdom
 
-function copilotProvider(models: ProviderInfo['models']): NonNullable<Parameters<typeof resolveReasoningModelInfo>[1]> {
-  return {
-    id: 'github-copilot',
-    type: ModelProviderType.OpenAI,
-    models,
-  }
-}
+import { ModelProviderEnum, type ProviderInfo } from '@shared/types'
+import { renderHook } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
 
-describe('resolveReasoningModelInfo for GitHub Copilot', () => {
-  it('routes stored GPT-5.6 Luna records to openai-responses', () => {
-    const info = resolveReasoningModelInfo(
-      { provider: 'github-copilot', modelId: 'gpt-5.6-luna' },
-      copilotProvider([{ modelId: 'gpt-5.6-luna' }])
+vi.mock('@/stores/chatStore', () => ({
+  updateSession: vi.fn(),
+}))
+
+import { useReasoningControlState } from './useReasoningControlState'
+
+const providers = [
+  {
+    id: ModelProviderEnum.ChatboxAI,
+    models: [
+      {
+        modelId: 'deepseek-v4-pro',
+        apiStyle: 'openai-responses',
+        capabilities: ['tool_use'],
+      },
+    ],
+  },
+] as ProviderInfo[]
+
+describe('useReasoningControlState new-conversation defaults', () => {
+  it('applies and persists the configured default effort for the selected model', () => {
+    const { result } = renderHook(() =>
+      useReasoningControlState({
+        currentSessionId: 'new',
+        isNewSession: true,
+        model: { provider: ModelProviderEnum.ChatboxAI, modelId: 'deepseek-v4-pro' },
+        providers,
+        defaultReasoningLevel: 'high',
+      })
     )
 
-    expect(info?.apiStyle).toBe('openai-responses')
+    const expected = { openai: { reasoningEffort: 'max', forceReasoning: true } }
+    expect(result.current.effectiveProviderOptions).toEqual(expected)
+    expect(result.current.settingsPatch).toEqual({
+      providerOptionsByModel: {
+        'chatbox-ai:deepseek-v4-pro': expected,
+      },
+    })
   })
 
-  it('overwrites a persisted openai apiStyle on Responses-only Copilot models', () => {
-    const info = resolveReasoningModelInfo(
-      { provider: 'github-copilot', modelId: 'gpt-5.6-luna' },
-      copilotProvider([{ modelId: 'gpt-5.6-luna', apiStyle: 'openai' }])
+  it('keeps the provider default when no global effort override is selected', () => {
+    const { result } = renderHook(() =>
+      useReasoningControlState({
+        currentSessionId: 'new',
+        isNewSession: true,
+        model: { provider: ModelProviderEnum.ChatboxAI, modelId: 'deepseek-v4-pro' },
+        providers,
+        defaultReasoningLevel: 'default',
+      })
     )
 
-    expect(info?.apiStyle).toBe('openai-responses')
-  })
-
-  it('keeps Chat Completions routing for Claude on Copilot', () => {
-    const info = resolveReasoningModelInfo(
-      { provider: 'github-copilot', modelId: 'claude-sonnet-5' },
-      copilotProvider([{ modelId: 'claude-sonnet-5', apiStyle: 'openai-responses' }])
-    )
-
-    expect(info?.apiStyle).toBe('openai')
+    expect(result.current.effectiveProviderOptions).toBeUndefined()
+    expect(result.current.settingsPatch).toBeUndefined()
   })
 })

@@ -19,6 +19,8 @@ const {
   userExecMock,
   readWorkspaceInstructionsMock,
   platformName,
+  platformType,
+  getAvailableMcpToolsMock,
 } = vi.hoisted(() => ({
   discoverSkillsMock: vi.fn(),
   installFromSandboxMock: vi.fn(),
@@ -29,6 +31,18 @@ const {
     licensePlanName: undefined as string | undefined,
     licenseActivationMethod: undefined as 'login' | 'manual' | undefined,
     hasExpiredLicense: false,
+    enableMermaidRendering: true,
+    interactiveAnimationsEnabled: false,
+    networkTools: {
+      enabled: true,
+      sshReadOnlyAutoApproval: true,
+      maxLanScanHosts: 256,
+      speedTestMaxBytes: 25_000_000,
+      speedTestDownloadUrl: 'https://speed.example/down',
+      speedTestUploadUrl: 'https://speed.example/up',
+      sshProfiles: [],
+      snmpProfiles: [],
+    },
   },
   getSettingsMock: vi.fn(),
   isProMock: vi.fn(),
@@ -42,6 +56,10 @@ const {
   userExecMock: vi.fn(),
   readWorkspaceInstructionsMock: vi.fn(),
   platformName: { current: 'darwin' },
+  platformType: { current: 'web' as 'web' | 'mobile' | 'desktop' },
+  getAvailableMcpToolsMock: vi.fn(() => ({
+    mcp_tool: { execute: async () => ({}) },
+  })),
 }))
 
 vi.hoisted(() => {
@@ -54,6 +72,14 @@ vi.hoisted(() => {
   const windowMock: Record<string, unknown> = {
     electronAPI: undefined,
     localStorage: storage,
+    innerWidth: 390,
+    innerHeight: 844,
+    devicePixelRatio: 3,
+    matchMedia: () => ({
+      matches: true,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }),
   }
   ;(globalThis as unknown as { window: Record<string, unknown>; localStorage: typeof storage }).window = windowMock
   ;(globalThis as unknown as { window: Record<string, unknown>; localStorage: typeof storage }).localStorage = storage
@@ -62,7 +88,9 @@ vi.hoisted(() => {
 
 vi.mock('@/platform', () => ({
   default: {
-    type: 'web',
+    get type() {
+      return platformType.current
+    },
     getPlatform: vi.fn().mockImplementation(() => Promise.resolve(platformName.current)),
     readWorkspaceInstructions: readWorkspaceInstructionsMock,
     // Presence enables view_image registration (isViewImageAvailable).
@@ -77,9 +105,7 @@ vi.mock('@/analytics/agent-mode', () => ({
 
 vi.mock('@/packages/mcp/controller', () => ({
   mcpController: {
-    getAvailableTools: () => ({
-      mcp_tool: { execute: async () => ({}) },
-    }),
+    getAvailableTools: getAvailableMcpToolsMock,
   },
 }))
 
@@ -151,9 +177,26 @@ vi.mock('@/packages/model-calls/toolsets/web-search', () => {
   const { z } = require('zod')
   return {
     default: { description: 'web search toolset' },
-    getToolSetDescription: ({ includeParseLink }: { includeParseLink: boolean }) =>
-      includeParseLink ? 'web search toolset\n## parse_link' : 'web search toolset',
+    getToolSetDescription: ({
+      includeParseLink,
+      includeImageSearch,
+      includeVideoSearch,
+    }: {
+      includeParseLink: boolean
+      includeImageSearch?: boolean
+      includeVideoSearch?: boolean
+    }) =>
+      [
+        'web search toolset',
+        includeImageSearch ? '## image_search' : '',
+        includeVideoSearch ? '## video_search' : '',
+        includeParseLink ? '## parse_link' : '',
+      ]
+        .filter(Boolean)
+        .join('\n'),
     webSearchTool: tool({ description: 'web_search', inputSchema: z.object({}), execute: async () => ({}) }),
+    imageSearchTool: tool({ description: 'image_search', inputSchema: z.object({}), execute: async () => ({}) }),
+    videoSearchTool: tool({ description: 'video_search', inputSchema: z.object({}), execute: async () => ({}) }),
     parseLinkTool: tool({ description: 'parse_link', inputSchema: z.object({}), execute: async () => ({}) }),
   }
 })
@@ -235,6 +278,7 @@ const sandboxToolNames = [
 
 beforeEach(() => {
   vi.clearAllMocks()
+  platformType.current = 'web'
   for (const listener of skillsChangedListeners) {
     listener()
   }
@@ -246,6 +290,8 @@ beforeEach(() => {
   settingsState.licensePlanName = undefined
   settingsState.licenseActivationMethod = undefined
   settingsState.hasExpiredLicense = false
+  settingsState.enableMermaidRendering = true
+  settingsState.interactiveAnimationsEnabled = false
   webSearchProvider.current = 'build-in'
   platformName.current = 'darwin'
   isProMock.mockReturnValue(true)
@@ -291,6 +337,76 @@ beforeEach(() => {
 // ── Tests ──────────────────────────────────────────────────────────────────
 
 describe('buildToolsForSession', () => {
+  test('enables read-only Skills and remote MCP in mobile Chat Mode', async () => {
+    platformType.current = 'mobile'
+    const onAgentModeActivated = vi.fn()
+    const model = createMockModel({
+      isSupportToolUse: vi.fn((scope?: string) => scope !== 'agent'),
+    })
+
+    const result = await buildToolsForSession(model, {
+      webBrowsing: false,
+      messages: [],
+      agentMode: 'off',
+      onAgentModeActivated,
+    })
+
+    expect(result.tools.load_skill).toBeDefined()
+    expect(result.tools.mcp_tool).toBeDefined()
+    expect(result.tools.user_exec).toBeUndefined()
+    expect(result.tools.install_skill).toBeUndefined()
+    expect(result.instructions).toContain('read-only prompt skills')
+    expect(result.instructions).toContain('test-skill')
+    expect(getAvailableMcpToolsMock).toHaveBeenCalledWith({ remoteOnly: true })
+
+    if (!result.tools.load_skill.execute) throw new Error('load_skill execute missing')
+    await result.tools.load_skill.execute({ name: 'test-skill' }, {} as never)
+    expect(loadSkillMock).toHaveBeenCalledWith('test-skill')
+    expect(onAgentModeActivated).not.toHaveBeenCalled()
+  })
+
+  test('exposes the local Three.js animation tool independently of Work Mode when enabled', async () => {
+    settingsState.interactiveAnimationsEnabled = true
+    const result = await buildToolsForSession(createMockModel(), {
+      webBrowsing: false,
+      messages: [],
+      agentMode: 'off',
+    })
+
+    expect(result.tools.create_threejs_animation).toBeDefined()
+    expect(result.instructions).toContain('## create_threejs_animation')
+    expect(result.instructions).toContain('rendered locally inside Chatbox')
+    expect(result.instructions).toContain('## Static diagrams')
+    expect(result.instructions).toContain('```mermaid')
+    expect(result.instructions).toContain('## Current visualization display')
+    expect(result.instructions).toContain('390 × 844 CSS pixels, portrait, with touch input')
+    expect(result.instructions).toContain('api.getViewport()')
+    expect(result.instructions).toContain('api.onResize(callback)')
+  })
+
+  test('omits Mermaid routing guidance when Mermaid rendering is disabled', async () => {
+    settingsState.enableMermaidRendering = false
+    const result = await buildToolsForSession(createMockModel(), {
+      webBrowsing: false,
+      messages: [],
+      agentMode: 'off',
+    })
+
+    expect(result.instructions).not.toContain('## Static diagrams')
+    expect(result.instructions).not.toContain('## Current visualization display')
+  })
+
+  test('does not expose the animation tool to models without tool calling', async () => {
+    settingsState.interactiveAnimationsEnabled = true
+    const result = await buildToolsForSession(createMockModel({ isSupportToolUse: vi.fn().mockReturnValue(false) }), {
+      webBrowsing: false,
+      messages: [],
+      agentMode: 'off',
+    })
+
+    expect(result.tools.create_threejs_animation).toBeUndefined()
+  })
+
   test('agentMode="off" — no skills tools, no sandbox tools in result', async () => {
     const model = createMockModel()
     const options: BuildToolsOptions = {
@@ -676,6 +792,37 @@ describe('buildToolsForSession', () => {
     expect(result.tools.web_search).toBeDefined()
     expect(result.tools.parse_link).toBeUndefined()
     expect(result.instructions).not.toContain('## parse_link')
+  })
+
+  test('SearXNG exposes image_search and video_search with their model instructions', async () => {
+    webSearchProvider.current = 'searxng'
+    const model = createMockModel()
+
+    const result = await buildToolsForSession(model, {
+      webBrowsing: true,
+      messages: [],
+      agentMode: 'off',
+    })
+
+    expect(result.tools.web_search).toBeDefined()
+    expect(result.tools.image_search).toBeDefined()
+    expect(result.tools.video_search).toBeDefined()
+    expect(result.tools.parse_link).toBeDefined()
+    expect(result.instructions).toContain('image_search')
+    expect(result.instructions).toContain('video_search')
+    expect(result.instructions).toContain('## parse_link')
+  })
+
+  test('non-SearXNG search providers do not expose media search tools', async () => {
+    webSearchProvider.current = 'bing'
+    const result = await buildToolsForSession(createMockModel(), {
+      webBrowsing: true,
+      messages: [],
+      agentMode: 'off',
+    })
+
+    expect(result.tools.image_search).toBeUndefined()
+    expect(result.tools.video_search).toBeUndefined()
   })
 
   test('agentMode="on" without codeExecution — load_skill only, no code-exec tools', async () => {

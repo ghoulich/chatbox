@@ -28,6 +28,7 @@ import { RouteComponent as SettingsGeneralRouteComponent } from '@/routes/settin
 import { RouteComponent as SettingsHotkeysRouteComponent } from '@/routes/settings/hotkeys'
 import { RouteComponent as SettingsIndexRouteComponent } from '@/routes/settings/index'
 import { RouteComponent as SettingsMcpRouteComponent } from '@/routes/settings/mcp'
+import { RouteComponent as SettingsNetworkToolsRouteComponent } from '@/routes/settings/network-tools'
 import { RouteComponent as SettingsProviderProviderIdRouteComponent } from '@/routes/settings/provider/$providerId'
 import { RouteComponent as SettingsProviderChatboxAiRouteComponent } from '@/routes/settings/provider/chatbox-ai'
 import { RouteComponent as SettingsProviderIndexRouteComponent } from '@/routes/settings/provider/index'
@@ -81,6 +82,12 @@ const SettingsWebSearchRoute = createRoute({
 const SettingsMcpRoute = createRoute({
   component: SettingsMcpRouteComponent,
   path: '/settings/mcp',
+  getParentRoute: () => RootRoute,
+})
+
+const SettingsNetworkToolsRoute = createRoute({
+  component: SettingsNetworkToolsRouteComponent,
+  path: '/settings/network-tools',
   getParentRoute: () => RootRoute,
 })
 
@@ -158,6 +165,7 @@ const routeTree = RootRoute.addChildren([
   SettingsArchiveRoute,
   SettingsWebSearchRoute,
   SettingsMcpRoute,
+  SettingsNetworkToolsRoute,
   SettingsSkillsRoute,
   SettingsAgentRoute,
   SettingsKnowledgeBaseRoute,

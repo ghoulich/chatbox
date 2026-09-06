@@ -82,14 +82,22 @@ export function boundCopilotPersona(text: string | undefined): string | undefine
   return truncateWithMarker(overlay, COPILOT_PROMPT_MAX_CHARS, 'Copilot')
 }
 
-export function buildSoulSection(soulRaw: string, copilotPersona?: string): string {
+export function buildSoulSection(
+  soulRaw: string,
+  copilotPersona?: string,
+  options: { includeEditGuidance?: boolean } = {}
+): string {
   const soul = extractSoulContent(soulRaw)
   const soulBody = soul ? truncateWithMarker(soul, SOUL_MAX_CHARS, 'Soul') : DEFAULT_SOUL_PERSONA
   const overlay = boundCopilotPersona(copilotPersona)
   const body = overlay ? `${soulBody}\n\n${COPILOT_OVERLAY_GUIDANCE}\n\n${overlay}` : soulBody
+  const editGuidance =
+    options.includeEditGuidance === false
+      ? 'The user can edit this in Settings. Changes take effect in future sessions.'
+      : `The user can edit this in Settings; when asked to update it, use the file tools (read_file / write_file / edit_file) on the virtual path ${SOUL_VIRTUAL_PATH}. Changes take effect in future sessions.`
   return `
 ## Soul
-Your persona, tone, and boundaries. The user can edit this in Settings; when asked to update it, use the file tools (read_file / write_file / edit_file) on the virtual path ${SOUL_VIRTUAL_PATH}. Changes take effect in future sessions.
+Your persona, tone, and boundaries. ${editGuidance}
 
 <soul>
 ${body}
@@ -142,10 +150,12 @@ export interface AgentPersonaPromptOptions extends AgentIdentityOptions {
   memories: MemoryEntry[]
   /** Frozen Copilot prompt for this conversation; omitted when the session has none. */
   copilotPersona?: string
+  /** Mobile Chat Mode has no file tools, so it must not advertise self-editing. */
+  includeSoulEditGuidance?: boolean
 }
 
 /** Identity + Soul + Memories — the stable head of the agent-mode system prompt. */
 export function buildAgentPersonaPrompt(options: AgentPersonaPromptOptions): string {
   return `${buildAgentIdentityPrompt(options)}
-${buildSoulSection(options.soul, options.copilotPersona)}${buildMemoriesSection(options.memories)}`
+${buildSoulSection(options.soul, options.copilotPersona, { includeEditGuidance: options.includeSoulEditGuidance })}${buildMemoriesSection(options.memories)}`
 }

@@ -7,7 +7,7 @@ export const UNTITLED_SESSION_NAME = 'Untitled'
 export const DEFAULT_INBOX_SESSION_ID = 'justchat-b612-406a-985b-3ab4d2c482ff'
 export const DEFAULT_INBOX_SESSION_NAME = 'Just chat'
 
-export type AutoTitleSession = Pick<Session, 'id' | 'messages' | 'name' | 'threadName'>
+export type AutoTitleSession = Pick<Session, 'id' | 'messages' | 'name' | 'threadName' | 'copilotId'>
 export type ThreadNamingIdentitySession = Pick<Session, 'messages'>
 export type NameGenerationKind = 'name' | 'thread'
 
@@ -87,7 +87,10 @@ export function resolveAutoTitleAction(session: AutoTitleSession): AutoTitleActi
   // Cheap field guards first: this runs on every persisted session update and
   // hasContentForAutoTitle walks all messages.
   if (shouldBackfillThreadName(session)) return null
-  const wantsSessionName = session.name === UNTITLED_SESSION_NAME
+  // A copilot name is only a useful placeholder before the first reply. Keep
+  // the visible session-list title topic based; otherwise every conversation
+  // created with the same copilot remains indistinguishable in the sidebar.
+  const wantsSessionName = session.name === UNTITLED_SESSION_NAME || Boolean(session.copilotId)
   if (!wantsSessionName && session.threadName) return null
   if (!hasContentForAutoTitle(session.messages)) return null
   return wantsSessionName ? 'session-and-thread' : 'thread'

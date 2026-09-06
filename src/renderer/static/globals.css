@@ -2,6 +2,27 @@
 @tailwind components;
 @tailwind utilities;
 
+.mermaid-diagram-container {
+  width: 100%;
+  max-width: 100%;
+  overflow: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-x pan-y pinch-zoom;
+}
+
+.mermaid-diagram-container > div {
+  width: 100%;
+  min-width: 0;
+}
+
+.mermaid-diagram-container svg {
+  display: block;
+  width: 100% !important;
+  max-width: 100% !important;
+  height: auto !important;
+  margin-inline: auto;
+}
+
 :root {
   /* radius */
   --chatbox-radius-none: 0rem;

@@ -69,7 +69,13 @@ const FileParseError = NiceModal.create(({ errorCode, fileName }: FileParseError
       )
     }
     if (isSessionAttachmentRagIndexingError(errorCode)) {
-      return <Text>{`${t('Indexing failed')}. ${t('Continue')}`}</Text>
+      return (
+        <Text>
+          {t(
+            'File parsing succeeded, but indexing failed after automatic retries. Use the button next to the file to continue indexing.'
+          )}
+        </Text>
+      )
     }
     if (errorCode === SESSION_ATTACHMENT_RAG_REQUIRES_KNOWLEDGE_BASE_ERROR) {
       return (
@@ -166,7 +172,13 @@ const FileParseError = NiceModal.create(({ errorCode, fileName }: FileParseError
   }
 
   return (
-    <AdaptiveModal opened={modal.visible} onClose={onClose} size="md" centered title={t('File Processing Error')}>
+    <AdaptiveModal
+      opened={modal.visible}
+      onClose={onClose}
+      size="md"
+      centered
+      title={t(isSessionAttachmentRagIndexingError(errorCode) ? 'Indexing failed' : 'File Processing Error')}
+    >
       <Stack gap="md">
         {fileName && (
           <Text size="sm" c="chatbox-secondary">

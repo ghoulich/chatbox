@@ -40,6 +40,15 @@ describe('SessionSettingsSchema max output tokens', () => {
 })
 
 describe('SettingsSchema RAG default models', () => {
+  test.each(['auto', 'inline', 'retrieval'] as const)('parses %s session attachment processing', (mode) => {
+    const parsed = SettingsSchema.parse({
+      ...defaultSettings(),
+      sessionAttachmentProcessingMode: mode,
+    })
+
+    expect(parsed.sessionAttachmentProcessingMode).toBe(mode)
+  })
+
   test('parses default embedding and rerank model selections', () => {
     const parsed = SettingsSchema.parse({
       ...defaultSettings(),
@@ -129,6 +138,48 @@ describe('SettingsSchema MCP protocol mode', () => {
     })
 
     expect(parsed.mcp.servers[0].protocolMode).toBeUndefined()
+  })
+})
+
+describe('SettingsSchema SearXNG search settings', () => {
+  test('preserves server, authentication, and image-search options', () => {
+    const input = defaultSettings()
+    input.extension.webSearch = {
+      ...input.extension.webSearch,
+      provider: 'searxng',
+      searxngBaseUrl: 'https://search.example.com',
+      searxngAuthType: 'basic',
+      searxngUsername: 'alice',
+      searxngPassword: 'secret',
+      searxngMaxResults: 15,
+      searxngSafeSearch: 2,
+    }
+
+    const parsed = SettingsSchema.parse(input)
+    expect(parsed.extension.webSearch).toMatchObject({
+      provider: 'searxng',
+      searxngBaseUrl: 'https://search.example.com',
+      searxngAuthType: 'basic',
+      searxngUsername: 'alice',
+      searxngPassword: 'secret',
+      searxngMaxResults: 15,
+      searxngSafeSearch: 2,
+    })
+  })
+
+  test('rejects unsafe result counts and falls back from an unknown provider', () => {
+    const input = defaultSettings()
+    input.extension.webSearch = {
+      ...input.extension.webSearch,
+      provider: 'searxng',
+      searxngMaxResults: 99,
+    }
+    expect(() => SettingsSchema.parse(input)).toThrow()
+
+    const unknown = defaultSettings() as unknown as Record<string, unknown>
+    const extension = (unknown.extension as Record<string, unknown>).webSearch as Record<string, unknown>
+    extension.provider = 'unknown-provider'
+    expect(SettingsSchema.parse(unknown).extension.webSearch.provider).toBe('build-in')
   })
 })
 

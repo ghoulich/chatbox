@@ -7,6 +7,7 @@ import { getModelSettings } from '@shared/utils/model_settings'
 import type { ModelMessage } from 'ai'
 import pMap from 'p-map'
 import { createModelDependencies } from '@/adapters'
+import { resolveVisionAnalysisPrompt } from './vision-analysis-prompt'
 
 /**
  * Resolve the OCR model based on user settings and license key.
@@ -48,12 +49,25 @@ export function getOCRModel(
  * Mutates message contentParts in place (sets `ocrResult` on image parts).
  * Uses p-map with concurrency: 3 for parallel OCR processing.
  */
-export async function ocrImagesInMessages(messages: Message[], ocrModel: ModelInterface): Promise<void> {
-  const imageParts: Array<{ storageKey: string; part: Message['contentParts'][number] & { type: 'image' } }> = []
+export async function ocrImagesInMessages(
+  messages: Message[],
+  ocrModel: ModelInterface,
+  prompt?: string,
+  userQuestionFallback?: string
+): Promise<void> {
+  const imageParts: Array<{
+    storageKey: string
+    part: Message['contentParts'][number] & { type: 'image' }
+    userQuestion: string
+  }> = []
   for (const msg of messages) {
+    const userQuestion = msg.contentParts
+      .filter((part) => part.type === 'text')
+      .map((part) => part.text)
+      .join('\n')
     for (const part of msg.contentParts) {
       if (part.type === 'image' && !part.ocrResult) {
-        imageParts.push({ storageKey: part.storageKey, part })
+        imageParts.push({ storageKey: part.storageKey, part, userQuestion })
       }
     }
   }
@@ -64,7 +78,7 @@ export async function ocrImagesInMessages(messages: Message[], ocrModel: ModelIn
 
   await pMap(
     imageParts,
-    async ({ storageKey, part }) => {
+    async ({ storageKey, part, userQuestion }) => {
       const imageData = await dependencies.storage.getImage(storageKey)
       if (!imageData) return
 
@@ -73,11 +87,7 @@ export async function ocrImagesInMessages(messages: Message[], ocrModel: ModelIn
         content: [
           {
             type: 'text',
-            text: [
-              'OCR the following image into Markdown.',
-              'Tables should be formatted as HTML.',
-              'Do not surround your output with triple backticks.',
-            ].join(' '),
+            text: resolveVisionAnalysisPrompt(prompt, userQuestion, userQuestionFallback),
           },
           { type: 'image' as const, image: imageData },
         ],

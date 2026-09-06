@@ -11,6 +11,7 @@ import type { Message } from '@shared/types'
 import { v4 as uuidv4 } from 'uuid'
 import { rendererApplication } from '@/app/renderer-application'
 import platform from '@/platform'
+import { supportsSessionAttachmentRag } from '@/platform/session-attachment-rag/support'
 import { guardSessionAction } from './action-guard'
 
 const forkIdentity = {
@@ -168,7 +169,7 @@ export async function deleteFork(sessionId: string, forkMessageId: string) {
 }
 
 async function reassignSharedAttachmentOwnership(sessionId: string, removed: Message[], survivors: Message[]) {
-  if (!platform.isDesktopLike || removed.length === 0) {
+  if (!supportsSessionAttachmentRag(platform.type) || removed.length === 0) {
     return
   }
   try {

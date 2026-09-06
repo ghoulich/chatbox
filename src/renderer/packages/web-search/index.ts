@@ -1,5 +1,7 @@
 import { cachified } from '@epic-web/cachified'
 import type { SearchResultItem } from '@shared/types'
+import type { VideoPlaybackFilter } from '@shared/video-search-tool'
+import { normalizeSearchEngines } from '@shared/web-search-tool'
 import { truncate } from 'lodash'
 import platform from '@/platform'
 import { getExtensionSettings, getLanguage, getLicenseKey } from '@/stores/settingActions'
@@ -10,10 +12,33 @@ import { BingNewsSearch } from './bing-news'
 import { BochaSearch } from './bocha'
 import { ChatboxSearch } from './chatbox-search'
 import { QueritSearch } from './querit'
-import { normalizeSearxngBaseUrl, SearxngSearch } from './searxng'
+import { type SearXNGAuth, normalizeSearXNGBaseUrl, SearXNGSearch } from './searxng'
 import { TavilySearch } from './tavily'
 
 const MAX_CONTEXT_ITEMS = 10
+
+function getNormalizedSearXNGBaseUrl(raw: string): string {
+  try {
+    return normalizeSearXNGBaseUrl(raw)
+  } catch (error) {
+    throw ChatboxAIAPIError.fromCodeName(String(error), 'searxng_base_url_required')
+  }
+}
+
+function getSearXNGProvider(): SearXNGSearch {
+  const webSearch = getExtensionSettings().webSearch
+  const authType = webSearch.searxngAuthType ?? 'none'
+  let auth: SearXNGAuth = { type: 'none' }
+  if (authType === 'basic')
+    auth = { type: 'basic', username: webSearch.searxngUsername ?? '', password: webSearch.searxngPassword ?? '' }
+  else if (authType === 'bearer') auth = { type: 'bearer', token: webSearch.searxngBearerToken ?? '' }
+  return new SearXNGSearch({
+    baseUrl: getNormalizedSearXNGBaseUrl(webSearch.searxngBaseUrl ?? ''),
+    auth,
+    maxResults: webSearch.searxngMaxResults,
+    safeSearch: webSearch.searxngSafeSearch,
+  })
+}
 
 // 根据配置的搜索提供方来选择搜索服务
 function getSearchProviders() {
@@ -65,11 +90,7 @@ function getSearchProviders() {
       )
       break
     case 'searxng': {
-      const searxngBaseUrl = normalizeSearxngBaseUrl(settings.webSearch.searxngBaseUrl ?? '')
-      if (!searxngBaseUrl) {
-        throw ChatboxAIAPIError.fromCodeName('searxng_base_url_required', 'searxng_base_url_required')
-      }
-      selectedProviders.push(new SearxngSearch(searxngBaseUrl))
+      selectedProviders.push(getSearXNGProvider())
       break
     }
     default:
@@ -79,12 +100,15 @@ function getSearchProviders() {
   return selectedProviders
 }
 
-async function _searchRelatedResults(query: string, signal?: AbortSignal) {
+async function _searchRelatedResults(query: string, engines: string[], signal?: AbortSignal) {
   const providers = getSearchProviders()
   const results = await Promise.all(
     providers.map(async (provider) => {
       try {
-        const result = await provider.search(query, signal)
+        const result =
+          provider instanceof SearXNGSearch
+            ? await provider.search(query, signal, engines)
+            : await provider.search(query, signal)
         console.debug(`web search result for "${query}":`, result.items)
         return { result }
       } catch (err) {
@@ -127,29 +151,64 @@ async function _searchRelatedResults(query: string, signal?: AbortSignal) {
 }
 
 const cache = new Map()
+const imageCache = new Map()
+const videoCache = new Map()
 
 export const webSearchExecutor = async (
-  { query }: { query: string },
+  { query, engines }: { query: string; engines?: string[] },
   { abortSignal }: { abortSignal?: AbortSignal }
 ) => {
+  const normalizedEngines = normalizeSearchEngines(engines)
   const webSearch = getExtensionSettings().webSearch
   const provider = webSearch.provider
   const cacheIdentity =
-    provider === 'searxng' ? `${provider}:${normalizeSearxngBaseUrl(webSearch.searxngBaseUrl ?? '')}` : provider
+    provider === 'searxng' ? `${provider}:${getNormalizedSearXNGBaseUrl(webSearch.searxngBaseUrl ?? '')}` : provider
   const searchResults = await cachified({
     cache,
-    key: `search-context:${cacheIdentity}:${query}`,
+    key: `search-context:${cacheIdentity}:${normalizedEngines.join(',')}:${query}`,
     ttl: 1000 * 60 * 5,
-    getFreshValue: () => _searchRelatedResults(query, abortSignal),
+    getFreshValue: () => _searchRelatedResults(query, normalizedEngines, abortSignal),
   })
-  return { query, searchResults }
+  return { query, ...(normalizedEngines.length > 0 ? { engines: normalizedEngines } : {}), searchResults }
+}
+
+export const imageSearchExecutor = async (
+  { query, engines }: { query: string; engines?: string[] },
+  { abortSignal }: { abortSignal?: AbortSignal }
+) => {
+  const provider = getSearXNGProvider()
+  const settings = getExtensionSettings().webSearch
+  const normalizedEngines = normalizeSearchEngines(engines)
+  const imageResults = await cachified({
+    cache: imageCache,
+    key: `image-search:${provider.baseUrl}:${settings.searxngSafeSearch ?? 1}:${settings.searxngMaxResults ?? 10}:${normalizedEngines.join(',')}:${query}`,
+    ttl: 1000 * 60 * 5,
+    getFreshValue: () => provider.searchImages(query, abortSignal, normalizedEngines),
+  })
+  return { query, ...(normalizedEngines.length > 0 ? { engines: normalizedEngines } : {}), imageResults }
+}
+
+export const videoSearchExecutor = async (
+  { query, playback = 'any', engines }: { query: string; playback?: VideoPlaybackFilter; engines?: string[] },
+  { abortSignal }: { abortSignal?: AbortSignal }
+) => {
+  const provider = getSearXNGProvider()
+  const settings = getExtensionSettings().webSearch
+  const normalizedEngines = normalizeSearchEngines(engines)
+  const videoResults = await cachified({
+    cache: videoCache,
+    key: `video-search:${provider.baseUrl}:${settings.searxngSafeSearch ?? 1}:${settings.searxngMaxResults ?? 10}:${playback}:${normalizedEngines.join(',')}:${query}`,
+    ttl: 1000 * 60 * 5,
+    getFreshValue: () => provider.searchVideos(query, playback, abortSignal, normalizedEngines),
+  })
+  return { query, playback, ...(normalizedEngines.length > 0 ? { engines: normalizedEngines } : {}), videoResults }
 }
 
 /**
  * Single source of truth: which configured providers offer the parse_link tool.
  * Keep in sync with the provider classes' `supportsParseLink` flags.
  */
-export const PROVIDERS_WITH_PARSE_LINK: ReadonlySet<string> = new Set(['build-in', 'tavily'])
+export const PROVIDERS_WITH_PARSE_LINK: ReadonlySet<string> = new Set(['build-in', 'tavily', 'searxng'])
 
 /**
  * Returns the first configured search provider that supports parseLink.
@@ -160,4 +219,5 @@ export function getParseLinkProvider(): WebSearch | null {
   return providers.find((p) => p.supportsParseLink) ?? null
 }
 
+export type { ImageSearchResultItem } from '@shared/image-search-tool'
 export type { SearchResultItem }

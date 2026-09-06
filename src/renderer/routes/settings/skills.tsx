@@ -1,7 +1,8 @@
 import { Box, Text, Title } from '@mantine/core'
 import { createFileRoute } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
-import { SkillsSection } from '@/components/settings/skills'
+import { MobileSkillsSection, SkillsSection } from '@/components/settings/skills'
+import platform from '@/platform'
 
 export const Route = createFileRoute('/settings/skills')({
   component: RouteComponent,
@@ -14,11 +15,11 @@ export function RouteComponent() {
     <Box p="md">
       <Title order={5}>Skills</Title>
       <Text size="sm" c="dimmed" mt="xs">
-        {t('Enabled skills will be available in Task mode.')}
+        {platform.type === 'mobile'
+          ? t('Enabled Skills are matched automatically in conversations and may use local or enabled MCP tools.')
+          : t('Enabled skills will be available in Task mode.')}
       </Text>
-      <Box className="mt-8">
-        <SkillsSection />
-      </Box>
+      <Box className="mt-8">{platform.type === 'mobile' ? <MobileSkillsSection /> : <SkillsSection />}</Box>
     </Box>
   )
 }

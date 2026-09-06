@@ -11,11 +11,36 @@ import { StreamableHTTPClientTransport as LegacyHTTPClientTransport } from '@mod
 import { type JSONValue as AIToolJSONValue, dynamicTool, jsonSchema, type ToolSet } from 'ai'
 import Emittery from 'emittery'
 import { isEqual } from 'lodash'
+import platform from '@/platform'
 import { IPCStdioTransport } from './ipc-stdio-transport'
+import { createMobileMcpFetch } from './mobile-fetch'
 import type { MCPProtocolMode, MCPServerConfig, MCPServerStatus } from './types'
 
 type TransportConfig = MCPServerConfig['transport']
 type LegacyMCPClient = Awaited<ReturnType<typeof createMCPClient>>
+
+function getRemoteFetch() {
+  return platform.type === 'mobile' ? createMobileMcpFetch() : undefined
+}
+
+function getLegacyRemoteFetch(): typeof globalThis.fetch | undefined {
+  const mobileFetch = getRemoteFetch()
+  if (!mobileFetch) return undefined
+  return async (input, init) => {
+    const request = new Request(input, init)
+    const body = request.method === 'GET' || request.method === 'HEAD' ? undefined : await request.clone().text()
+    return await mobileFetch(request.url, {
+      method: request.method,
+      headers: request.headers,
+      body,
+      signal: request.signal,
+    })
+  }
+}
+
+function isTransportSupported(config: MCPServerConfig): boolean {
+  return platform.type !== 'mobile' || config.transport.type === 'http'
+}
 
 interface MCPClient {
   tools(): Promise<ToolSet>
@@ -132,6 +157,7 @@ async function createAutoClient(transportConfig: TransportConfig, name: string):
 
   const transport = new NegotiatingHTTPClientTransport(new URL(transportConfig.url), {
     requestInit: { headers: transportConfig.headers },
+    fetch: getRemoteFetch(),
   })
   try {
     return await connectNegotiatingClient(transport, name, 'auto')
@@ -144,6 +170,7 @@ async function createAutoClient(transportConfig: TransportConfig, name: string):
     try {
       const fallbackTransport = new NegotiatingSSEClientTransport(new URL(transportConfig.url), {
         requestInit: { headers: transportConfig.headers },
+        fetch: getRemoteFetch(),
       })
       return await connectNegotiatingClient(fallbackTransport, name, 'legacy')
     } catch (fallbackError) {
@@ -185,6 +212,7 @@ async function createLegacyClient(transportConfig: TransportConfig, name: string
     try {
       const transport = new LegacyHTTPClientTransport(new URL(transportConfig.url), {
         requestInit: { headers: transportConfig.headers },
+        fetch: getRemoteFetch(),
       })
       return createLegacyClientAdapter(
         await createMCPClient({
@@ -205,6 +233,7 @@ async function createLegacyClient(transportConfig: TransportConfig, name: string
               type: 'sse',
               url: transportConfig.url,
               headers: transportConfig.headers,
+              fetch: getLegacyRemoteFetch(),
             },
             onUncaughtError(error: unknown) {
               console.error('mcp:client:onUncaughtError', error)
@@ -297,14 +326,14 @@ export const mcpController = {
 
   bootstrap(serverConfigs: MCPServerConfig[]) {
     for (const serverConfig of serverConfigs) {
-      if (serverConfig.enabled) {
+      if (serverConfig.enabled && isTransportSupported(serverConfig)) {
         void this.startServer(serverConfig)
       }
     }
   },
 
   async startServer(serverConfig: MCPServerConfig) {
-    if (!serverConfig.enabled) {
+    if (!serverConfig.enabled || !isTransportSupported(serverConfig)) {
       return
     }
     const server = new MCPServer(serverConfig)
@@ -374,9 +403,10 @@ export const mcpController = {
     }
   },
 
-  getAvailableTools(): ToolSet {
+  getAvailableTools(options: { remoteOnly?: boolean } = {}): ToolSet {
     const toolSet: ToolSet = {}
     for (const { instance, config } of this.servers.values()) {
+      if (options.remoteOnly && config.transport.type !== 'http') continue
       const mcpTools = instance.getAvailableTools()
       for (const [toolName, tool] of Object.entries(mcpTools)) {
         const rawExecute = tool.execute?.bind(tool)

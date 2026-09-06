@@ -9,6 +9,34 @@
 
 我们定期从专业版仓库同步代码到这个仓库，反之亦然。
 
+## ghoulich Android 二开版
+
+本 fork 以官方 Chatbox `v1.23.1` 为基线，当前二开版本为
+`1.23.1.491`。在保留上游桌面端和 Web 代码的同时，Android 端增加：
+
+- 通过 Android SAF 只读扫描 Skills，在对话中调用 `load_skill`，并在
+  Android 对话模式中启用 Skills 与远程 HTTP/SSE MCP；
+- 支持认证和引擎选择的 SearXNG 网页、图片、视频搜索，回答中直接显示
+  图片及视频缩略图，并区分应用内可播放视频与只能打开网页的视频；
+- 新会话 Soul/人格注入，以及不会覆盖用户手动命名的搭档会话自动标题；
+- DNS、Ping、TCP、HTTP/TLS、Wi-Fi/LAN、限流测速、SSH 和只读 SNMP 等
+  Android 本地网络诊断，敏感凭据不会出现在模型可见的工具结果中；
+- 前台服务辅助的后台生成、隐私通知、受限 wake lock，以及后台开关触发的
+  Settings Store 崩溃修复；
+- 响应式 Mermaid 图表与沙箱化 Three.js 教学动图，支持真全屏、触摸旋转/
+  平移/双指缩放、离线 KaTeX 字体、生命周期清理和精确安全规则；
+- 会话附件可选择内联全文或嵌入检索及重排；自动模式统一按文件类型和大小
+  决策；移动索引支持批次退避重试、持久化检查点和断点续传；
+- Android 文档导出、用户 CA（仍校验主机名）、移动界面修复，以及全部二开
+  UI 文本在内置 14 种语言中的翻译。
+
+官方 `v1.23.1` 快照不包含完整的 Capacitor Android 工程。本项目当前通过
+[`custom/android`](../custom/android) 中维护的覆盖文件和仓库外单独保存的
+已验证壳组装 APK。签名证书、口令、APK、私人模型/搜索配置和应用数据库不会
+提交到仓库。实现说明见 [`custom/android/README.md`](../custom/android/README.md)，
+最新设备测试见
+[`test-evidence/mumu-v491/TEST_REPORT.md`](../test-evidence/mumu-v491/TEST_REPORT.md)。
+
 ### 下载电脑端
 
 <table style="width: 100%">

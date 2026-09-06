@@ -98,6 +98,7 @@ function Index() {
 
   const { providers } = useProviders()
   const defaultChatModel = useSettingsStore((s) => s.defaultChatModel)
+  const defaultWebBrowsing = useSettingsStore((s) => s.defaultWebBrowsing)
   const hasLicense = useSettingsStore((s) => Boolean(s.licenseKey))
   const licenseKey = useSettingsStore((s) => s.licenseKey)
   const licenseDetail = useSettingsStore((s) => s.licenseDetail)

@@ -28,7 +28,7 @@ export default class CustomOpenAI extends AbstractAISDKModel {
 
   constructor(
     public options: Options,
-    dependencies: ModelDependencies
+    dependencies: ModelDependencies,
   ) {
     super(options, dependencies)
     const { apiHost, apiPath } = normalizeOpenAIApiHostAndPath(options)
@@ -38,7 +38,7 @@ export default class CustomOpenAI extends AbstractAISDKModel {
   protected getCallSettings(options: CallChatCompletionOptions) {
     const openAICompatibleOptions = pickOpenAICompatibleReasoningOptions(
       this.options.model.modelId,
-      options.providerOptions
+      options.providerOptions,
     )
     return {
       temperature: this.options.temperature,
@@ -63,7 +63,11 @@ export default class CustomOpenAI extends AbstractAISDKModel {
       name: this.name,
       apiKey: this.options.apiKey,
       baseURL: this.options.apiHost,
-      fetch: fetchFunction,
+      // Chat calls pass an endpoint-rewriting fetch below, while embeddings
+      // use the provider directly through AbstractAISDKModel. Keep both paths
+      // on the host request adapter so mobile embeddings do not fall back to
+      // the WebView's CORS- and certificate-limited global fetch.
+      fetch: fetchFunction || createFetchWithProxy(this.options.useProxy, this.dependencies),
       headers: this.options.apiHost.includes('openrouter.ai')
         ? {
             'HTTP-Referer': 'https://chatboxai.app',
@@ -95,7 +99,7 @@ export default class CustomOpenAI extends AbstractAISDKModel {
         apiKey: this.options.apiKey,
         useProxy: this.options.useProxy,
       },
-      this.dependencies
+      this.dependencies,
     )
   }
 

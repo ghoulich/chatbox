@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next'
 import { useMCPServerStatus, useToggleMCPServer } from '@/hooks/mcp'
 import { navigateToSettings } from '@/modals/settings-navigation'
 import { BUILTIN_MCP_SERVERS } from '@/packages/mcp/builtin'
+import platform from '@/platform'
 import { useAutoValidate } from '@/stores/premiumActions'
 import { useMcpSettings } from '@/stores/settingsStore'
 import { ScalableIcon } from '../common/ScalableIcon'
@@ -49,7 +50,7 @@ const MCPMenu: FC<{ children: (enabledTools: number) => ReactNode }> = ({ childr
   const [opened, setOpened] = useState(false)
   return (
     <Menu
-      trigger="hover"
+      trigger={platform.type === 'mobile' ? 'click' : 'hover'}
       openDelay={100}
       closeDelay={100}
       opened={opened}

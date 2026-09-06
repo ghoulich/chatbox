@@ -247,6 +247,11 @@ const AgentModePanel = forwardRef<AgentModePanelHandle, AgentModePanelProps>(fun
     [entry, modelSupportsAgentMode]
   )
   const workModeCapabilitiesDisabled = agentModeUIState.capabilitiesDisabled
+  // Skills and remote MCP are mobile Chat Mode capabilities. Their settings
+  // remain available even if the currently selected model cannot call tools.
+  const mobileExtensionCapabilitiesEnabled = platform.type === 'mobile'
+  const skillsDisabled = workModeCapabilitiesDisabled && !mobileExtensionCapabilitiesEnabled
+  const mcpDisabled = workModeCapabilitiesDisabled && !mobileExtensionCapabilitiesEnabled
 
   // Web Search state
   const webSearchProvider = useSettingsStore((s) => s.extension.webSearch.provider)
@@ -357,10 +362,10 @@ const AgentModePanel = forwardRef<AgentModePanelHandle, AgentModePanelProps>(fun
   }, [])
 
   useEffect(() => {
-    if (page === 'skills') {
+    if (showSkills) {
       void loadSkills()
     }
-  }, [page, loadSkills, skillsVersion])
+  }, [loadSkills, showSkills, skillsVersion])
 
   useEffect(() => {
     return subscribeSkillsChanged(() => {
@@ -982,7 +987,7 @@ const AgentModePanel = forwardRef<AgentModePanelHandle, AgentModePanelProps>(fun
     if (page === 'skills') {
       return (
         <>
-          <SubPanelHeader title="Skills" settingsPath="/skills" disabled={workModeCapabilitiesDisabled} />
+          <SubPanelHeader title={t('Skills')} settingsPath="/skills" disabled={skillsDisabled} />
           <Divider my={4} />
           {skillsLoading ? (
             <Flex justify="center" py="md">
@@ -995,14 +1000,14 @@ const AgentModePanel = forwardRef<AgentModePanelHandle, AgentModePanelProps>(fun
                 px="sm"
                 py={6}
                 className={`rounded ${
-                  workModeCapabilitiesDisabled
+                  skillsDisabled
                     ? 'cursor-default opacity-50'
                     : 'cursor-pointer hover:bg-[var(--mantine-color-gray-0)] dark:hover:bg-[var(--mantine-color-dark-5)]'
                 }`}
                 gap="xs"
                 align="center"
                 onClick={() => {
-                  if (workModeCapabilitiesDisabled) return
+                  if (skillsDisabled) return
                   onSkillSelect(skill.name)
                   onClose()
                 }}
@@ -1025,9 +1030,9 @@ const AgentModePanel = forwardRef<AgentModePanelHandle, AgentModePanelProps>(fun
               <Button
                 size="xs"
                 variant="light"
-                disabled={workModeCapabilitiesDisabled}
+                disabled={skillsDisabled}
                 onClick={() => {
-                  if (workModeCapabilitiesDisabled) return
+                  if (skillsDisabled) return
                   onClose()
                   navigateToSettings('/skills')
                 }}
@@ -1044,7 +1049,7 @@ const AgentModePanel = forwardRef<AgentModePanelHandle, AgentModePanelProps>(fun
     if (page === 'mcp') {
       return (
         <>
-          <SubPanelHeader title="MCP" settingsPath="/mcp" disabled={workModeCapabilitiesDisabled} />
+          <SubPanelHeader title="MCP" settingsPath="/mcp" disabled={mcpDisabled} />
           <Divider my={4} />
           {isPremium && (
             <>
@@ -1054,7 +1059,7 @@ const AgentModePanel = forwardRef<AgentModePanelHandle, AgentModePanelProps>(fun
                   id={server.id}
                   name={server.name}
                   enabled={mcp.enabledBuiltinServers.includes(server.id)}
-                  disabled={workModeCapabilitiesDisabled}
+                  disabled={mcpDisabled}
                   onEnabledChange={onMCPEnabledChange}
                 />
               ))}
@@ -1067,7 +1072,7 @@ const AgentModePanel = forwardRef<AgentModePanelHandle, AgentModePanelProps>(fun
               id={server.id}
               name={server.name}
               enabled={server.enabled}
-              disabled={workModeCapabilitiesDisabled}
+              disabled={mcpDisabled}
               onEnabledChange={onMCPEnabledChange}
             />
           ))}
@@ -1076,9 +1081,9 @@ const AgentModePanel = forwardRef<AgentModePanelHandle, AgentModePanelProps>(fun
               <Button
                 size="xs"
                 variant="light"
-                disabled={workModeCapabilitiesDisabled}
+                disabled={mcpDisabled}
                 onClick={() => {
-                  if (workModeCapabilitiesDisabled) return
+                  if (mcpDisabled) return
                   onClose()
                   navigateToSettings('/mcp')
                 }}
@@ -1383,11 +1388,11 @@ const AgentModePanel = forwardRef<AgentModePanelHandle, AgentModePanelProps>(fun
             {showSkills && (
               <ExtensionRow
                 icon={<IconWand size={16} className="text-[var(--chatbox-tint-secondary)]" />}
-                label="Skills"
-                badge={enabledSkillNames.length > 0 ? enabledSkillNames.length : undefined}
+                label={t('Skills')}
+                badge={enabledSkills.length > 0 ? enabledSkills.length : undefined}
                 active={page === 'skills'}
                 page="skills"
-                disabled={workModeCapabilitiesDisabled}
+                disabled={skillsDisabled}
               />
             )}
 
@@ -1398,7 +1403,7 @@ const AgentModePanel = forwardRef<AgentModePanelHandle, AgentModePanelProps>(fun
                 badge={enabledMCPCount > 0 ? enabledMCPCount : undefined}
                 active={page === 'mcp'}
                 page="mcp"
-                disabled={workModeCapabilitiesDisabled}
+                disabled={mcpDisabled}
               />
             )}
 
@@ -1426,7 +1431,11 @@ const AgentModePanel = forwardRef<AgentModePanelHandle, AgentModePanelProps>(fun
 
           {showDesktopCapabilityHint && (
             <Text size="xs" c="chatbox-secondary" px="sm" pt="sm" pb="xs" className="leading-snug">
-              {t('Skills, MCP, code execution, and Working Directory are available in the desktop app.')}
+              {platform.type === 'mobile' && (showSkills || showMcp)
+                ? t(
+                    'Skills and remote MCP are available in Chat Mode. Code execution and Working Directory require the desktop app.'
+                  )
+                : t('Skills, MCP, code execution, and Working Directory are available in the desktop app.')}
             </Text>
           )}
         </Stack>

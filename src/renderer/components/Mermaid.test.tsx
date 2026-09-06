@@ -3,7 +3,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import { render, screen } from '@/test-utils'
+import { render, screen, waitFor } from '@/test-utils'
 
 const mocks = vi.hoisted(() => ({
   initialize: vi.fn(),
@@ -81,5 +81,14 @@ describe('MessageMermaid', () => {
         },
       },
     })
+  })
+
+  test('wraps a rendered diagram in a responsive pan and pinch container', async () => {
+    mocks.render.mockResolvedValue({ id: 'diagram-1', svg: '<svg id="diagram-1" viewBox="0 0 800 400"></svg>' })
+
+    const { container } = render(<MessageMermaid source={'flowchart TB\nA --> B'} theme="light" />)
+
+    await waitFor(() => expect(container.querySelector('#diagram-1')).toBeTruthy())
+    expect(container.querySelector('.mermaid-diagram-container')).toBeTruthy()
   })
 })

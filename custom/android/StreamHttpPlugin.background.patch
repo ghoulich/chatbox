@@ -1,0 +1,7 @@
+--- a/node_modules/capacitor-stream-http/android/src/main/java/com/chatbox/plugins/streamhttp/StreamHttpPlugin.java
++++ b/node_modules/capacitor-stream-http/android/src/main/java/com/chatbox/plugins/streamhttp/StreamHttpPlugin.java
+@@
+-                connection.setReadTimeout(30000); // 30 seconds
++                // Reasoning streams can be silent for longer than 30 seconds. The
++                // bounded foreground service owns the maximum task lifetime.
++                connection.setReadTimeout(0);

@@ -10,6 +10,7 @@ import { ScalableIcon } from '@/components/common/ScalableIcon'
 import { useToggleMCPServer } from '@/hooks/mcp'
 import { mcpController } from '@/packages/mcp/controller'
 import type { MCPServerConfig } from '@/packages/mcp/types'
+import platform from '@/platform'
 import { toastError } from '@/packages/toast'
 import { useMcpSettings, useSettingsStore } from '@/stores/settingsStore'
 import { trackEvent } from '@/utils/track'
@@ -154,7 +155,7 @@ const CustomServersSection: FC<Props> = (props) => {
           bd="1px dashed var(--chatbox-border-primary)"
           p="sm"
           className="cursor-pointer"
-          onClick={spotlight.open}
+          onClick={() => (platform.type === 'desktop' ? spotlight.open() : triggerAddServer())}
         >
           <Flex direction="column" justify="center" align="center" h="100%" gap={4}>
             <ActionIcon variant="filled" size="sm">
@@ -176,7 +177,9 @@ const CustomServersSection: FC<Props> = (props) => {
           )
         })}
       </SimpleGrid>
-      <ServerRegistrySpotlight triggerAddServer={triggerAddServer} triggerImportJson={triggerImportJson} />
+      {platform.type === 'desktop' && (
+        <ServerRegistrySpotlight triggerAddServer={triggerAddServer} triggerImportJson={triggerImportJson} />
+      )}
       <ConfigModal
         mode={modal?.mode}
         config={modal ? modal.config : null}

@@ -23,6 +23,17 @@ vi.mock('@/components/common/ChatboxAIErrorMessage', () => ({
   ChatboxAIErrorMessage: () => null,
 }))
 
+vi.mock('./ImageSearchResultGallery', () => ({
+  extractImageSearchResults: (result: { imageResults?: unknown[] } | undefined) => result?.imageResults ?? [],
+  ImageSearchResultGallery: ({ results }: { results: Array<{ title: string }> }) => (
+    <div data-testid="image-search-gallery">{results.map((result) => result.title).join(', ')}</div>
+  ),
+}))
+
+vi.mock('./InlineSearchMedia', () => ({
+  extractVideoSearchResults: (result: { videoResults?: unknown[] } | undefined) => result?.videoResults ?? [],
+}))
+
 vi.mock('@/hooks/useBlob', () => ({ useBlob: useBlobMock }))
 
 vi.mock('@/platform', () => ({
@@ -240,5 +251,102 @@ describe('command execution timeline', () => {
 
     expect(screen.getByText(/Failed/)).toBeTruthy()
     expect(screen.queryByText(/Stopped/)).toBeNull()
+  })
+
+  it('automatically expands completed image search results as URLs by default', () => {
+    render(
+      <MantineProvider>
+        <StepTimelineUI
+          parts={[
+            commandPart({
+              toolName: 'image_search',
+              args: { query: 'aurora' },
+              state: 'result',
+              result: {
+                query: 'aurora',
+                imageResults: [
+                  {
+                    title: 'Northern lights',
+                    imageUrl: 'https://images.example.com/full.jpg',
+                    thumbnailUrl: 'https://images.example.com/thumb.jpg',
+                    sourceUrl: 'https://source.example.com/page',
+                    source: 'Example',
+                    resolution: '1920 x 1080',
+                  },
+                ],
+              },
+            }),
+          ]}
+        />
+      </MantineProvider>
+    )
+
+    expect(screen.getByText('https://images.example.com/full.jpg')).toBeTruthy()
+    expect(screen.queryByTestId('image-search-gallery')).toBeNull()
+  })
+
+  it('shows images in the process only when explicitly requested', () => {
+    render(
+      <MantineProvider>
+        <StepTimelineUI
+          parts={[
+            commandPart({
+              toolName: 'image_search',
+              args: { query: 'aurora', showInReasoning: true },
+              state: 'result',
+              result: {
+                imageResults: [
+                  {
+                    title: 'Northern lights',
+                    imageUrl: 'https://images.example.com/full.jpg',
+                    thumbnailUrl: 'https://images.example.com/thumb.jpg',
+                    sourceUrl: 'https://source.example.com/page',
+                    source: 'Example',
+                    resolution: '1920 x 1080',
+                  },
+                ],
+              },
+            }),
+          ]}
+        />
+      </MantineProvider>
+    )
+
+    expect(screen.getByTestId('image-search-gallery').textContent).toContain('Northern lights')
+  })
+
+  it('shows direct-play versus webpage status while presenting video search results', () => {
+    render(
+      <MantineProvider>
+        <StepTimelineUI
+          parts={[
+            commandPart({
+              toolName: 'video_search',
+              args: { query: 'network tutorial', playback: 'any' },
+              state: 'result',
+              result: {
+                videoResults: [
+                  {
+                    title: 'Direct tutorial',
+                    url: 'https://videos.example.com/direct',
+                    playbackMode: 'iframe',
+                  },
+                  {
+                    title: 'Web tutorial',
+                    url: 'https://videos.example.com/web',
+                    playbackMode: 'webpage',
+                  },
+                ],
+              },
+            }),
+          ]}
+        />
+      </MantineProvider>
+    )
+
+    expect(screen.getByText('https://videos.example.com/direct')).toBeTruthy()
+    expect(screen.getByText('https://videos.example.com/web')).toBeTruthy()
+    expect(screen.getByText('Play in Chatbox')).toBeTruthy()
+    expect(screen.getByText('Open webpage')).toBeTruthy()
   })
 })

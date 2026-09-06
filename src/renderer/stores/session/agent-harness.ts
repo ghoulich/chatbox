@@ -46,6 +46,7 @@ import {
 } from '@/packages/model-calls/message-utils'
 import { getOS } from '@/packages/navigator'
 import platform from '@/platform'
+import { supportsSessionAttachmentRag } from '@/platform/session-attachment-rag/support'
 import { createSandboxProvider } from '@/sandbox'
 import { getCopilotMemorySelection } from '@/stores/copilotStore'
 
@@ -55,6 +56,7 @@ import { applyLegacyToolFallback } from './legacy-tool-fallback'
 import { getOCRModel, ocrImagesInMessages } from './ocr-helper'
 import { resolveSessionPromptContextSnapshot } from './prompt-context-snapshot'
 import { buildToolsForSession } from './tools-builder'
+import { getDefaultVisionAnalysisPrompt, getVisionUserQuestionFallback } from './vision-analysis-prompt'
 
 const log = getLogger('agent-generation-harness')
 const RECENT_TOOL_CALL_CACHE_WINDOW_MS = 5 * 60 * 1000
@@ -144,7 +146,7 @@ function getToolCallPreserveMessageIds(
 }
 
 export async function refreshSessionAttachmentStatuses(messages: Message[]): Promise<Message[]> {
-  if (platform.type !== 'desktop') {
+  if (!supportsSessionAttachmentRag(platform.type)) {
     return messages
   }
 
@@ -264,6 +266,7 @@ export async function prepareAgentGenerationHarness(
     targetMsgIx,
     persist: sideEffects?.persistSessionPromptContextSnapshot,
     copilotId: session.copilotId,
+    includeSoulInChatMode: platform.type === 'mobile',
   })
 
   const sandboxProvider = effectiveAgentMode !== 'off' ? sandboxProviderFactory() : null
@@ -341,7 +344,12 @@ export async function prepareAgentGenerationHarness(
       throw ChatboxAIAPIError.fromCodeName('model_not_support_image_2', 'model_not_support_image_2')
     }
     try {
-      await ocrImagesInMessages(promptMsgs, ocrResult.model)
+      await ocrImagesInMessages(
+        promptMsgs,
+        ocrResult.model,
+        globalSettings.visionAnalysisPrompt?.trim() || getDefaultVisionAnalysisPrompt(globalSettings.language),
+        getVisionUserQuestionFallback(globalSettings.language)
+      )
     } catch (err) {
       throw new OCRError(ocrResult.providerName, err instanceof Error ? err : new Error(`${err}`))
     }
@@ -405,11 +413,20 @@ export async function prepareAgentGenerationHarness(
   }
   let instructions = hasTools ? `${GLOBAL_RESPONSE_LANGUAGE_INSTRUCTION}${toolInstructions}` : toolInstructions
 
-  // Chat mode gets memories (no Soul/identity) from the same frozen snapshot,
-  // appended to the regular instruction path so the session system prompt stays
-  // authoritative. Tool guidance follows whether the memory tools were actually
-  // registered for this model.
-  if (
+  // Mobile has no desktop Work Mode, so its Chat Mode receives the frozen Soul
+  // while retaining the conversation's own system prompt. File-edit guidance is
+  // omitted because mobile exposes no local filesystem tools.
+  if (effectiveAgentMode !== 'on' && platform.type === 'mobile' && promptContextSnapshot) {
+    const personaPrompt = buildAgentPersonaPrompt({
+      soul: promptContextSnapshot.soul,
+      copilotPersona: promptContextSnapshot.copilotPersona,
+      memories: memoryEnabled ? promptContextSnapshot.memories : [],
+      platformType: platform.type,
+      os: getOS(),
+      includeSoulEditGuidance: false,
+    })
+    instructions = `${personaPrompt}\n${instructions}`
+  } else if (
     effectiveAgentMode !== 'on' &&
     memoryEnabled &&
     promptContextSnapshot &&

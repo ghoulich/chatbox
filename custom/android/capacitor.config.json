@@ -1,0 +1,12 @@
+{
+  "server": {
+    "cleartext": true,
+    "androidScheme": "http"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "splashFullScreen": false,
+      "splashImmersive": false
+    }
+  }
+}

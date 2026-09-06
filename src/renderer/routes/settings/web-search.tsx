@@ -13,7 +13,7 @@ import { PROVIDERS_WITH_PARSE_LINK } from '@/packages/web-search'
 import { BochaSearch } from '@/packages/web-search/bocha'
 import { WEB_SEARCH_PROVIDERS, type WebSearchProviderValue } from '@/packages/web-search/constants'
 import { QUERIT_SEARCH_URL } from '@/packages/web-search/querit'
-import { SearxngSearch } from '@/packages/web-search/searxng'
+import { type SearXNGAuth, SearXNGSearch } from '@/packages/web-search/searxng'
 import platform from '@/platform'
 import { useSettingsStore } from '@/stores/settingsStore'
 
@@ -43,11 +43,45 @@ export function RouteComponent() {
           body: { query: 'Chatbox' },
         })
         setQueritAvailable(true)
-      } catch (e) {
+      } catch {
         setQueritAvailable(false)
       } finally {
         setCheckingQuerit(false)
       }
+    }
+  }
+
+  const [checkingSearxng, setCheckingSearxng] = useState(false)
+  const [searxngAvailable, setSearxngAvailable] = useState<boolean>()
+  const getSearxngAuth = (): SearXNGAuth => {
+    if (extension.webSearch.searxngAuthType === 'basic') {
+      return {
+        type: 'basic',
+        username: extension.webSearch.searxngUsername ?? '',
+        password: extension.webSearch.searxngPassword ?? '',
+      }
+    }
+    if (extension.webSearch.searxngAuthType === 'bearer') {
+      return { type: 'bearer', token: extension.webSearch.searxngBearerToken ?? '' }
+    }
+    return { type: 'none' }
+  }
+  const checkSearxng = async () => {
+    setCheckingSearxng(true)
+    setSearxngAvailable(undefined)
+    try {
+      const provider = new SearXNGSearch({
+        baseUrl: extension.webSearch.searxngBaseUrl ?? '',
+        auth: getSearxngAuth(),
+        maxResults: extension.webSearch.searxngMaxResults,
+        safeSearch: extension.webSearch.searxngSafeSearch,
+      })
+      await provider.searchImages('Chatbox')
+      setSearxngAvailable(true)
+    } catch {
+      setSearxngAvailable(false)
+    } finally {
+      setCheckingSearxng(false)
     }
   }
 
@@ -60,7 +94,7 @@ export function RouteComponent() {
       try {
         await new BochaSearch(extension.webSearch.bochaApiKey).search('Chatbox')
         setBochaAvailable(true)
-      } catch (e) {
+      } catch {
         setBochaAvailable(false)
       } finally {
         setCheckingBocha(false)
@@ -89,27 +123,10 @@ export function RouteComponent() {
           },
         })
         setTavilyAvaliable(true)
-      } catch (e) {
+      } catch {
         setTavilyAvaliable(false)
       } finally {
         setCheckingTavily(false)
-      }
-    }
-  }
-
-  const [checkingSearxng, setCheckingSearxng] = useState(false)
-  const [searxngAvailable, setSearxngAvailable] = useState<boolean>()
-  const checkSearxng = async () => {
-    if (extension.webSearch.searxngBaseUrl?.trim()) {
-      setCheckingSearxng(true)
-      setSearxngAvailable(undefined)
-      try {
-        await new SearxngSearch(extension.webSearch.searxngBaseUrl).search('Chatbox')
-        setSearxngAvailable(true)
-      } catch (e) {
-        setSearxngAvailable(false)
-      } finally {
-        setCheckingSearxng(false)
       }
     }
   }
@@ -143,8 +160,10 @@ export function RouteComponent() {
         </Text>
         {(() => {
           const supportsParseLink = PROVIDERS_WITH_PARSE_LINK.has(extension.webSearch.provider)
+          const supportsImageSearch = extension.webSearch.provider === 'searxng'
           const tools: { label: string; supported: boolean }[] = [
             { label: t('Web Search'), supported: true },
+            { label: t('Image Search'), supported: supportsImageSearch },
             { label: t('Read Webpage'), supported: supportsParseLink },
           ]
           return tools.map(({ label, supported }) => (
@@ -174,28 +193,48 @@ export function RouteComponent() {
         </Text>
       )}
       {extension.webSearch.provider === 'searxng' && (
-        <Stack gap="xs">
-          <Text fw="600">{t('SearXNG Instance URL')}</Text>
-          <Flex align="center" gap="xs">
+        <Stack gap="md">
+          <Text size="xs" c="chatbox-gray">
+            {t('SearXNG provides private web, image, and video search. The server must enable JSON responses and suitable image and video engines.')}
+          </Text>
+          <Text size="xs" c="chatbox-gray">
+            {t('Webpage reading downloads and extracts the main article text locally on this device.')}
+          </Text>
+          <Stack gap="xs">
             <TextInput
-              flex={1}
-              maw={320}
-              value={extension.webSearch.searxngBaseUrl}
-              onChange={(e) => {
+              label={t('SearXNG Server Address')}
+              description={t('Example: https://search.example.com')}
+              placeholder="https://search.example.com"
+              maw={480}
+              value={extension.webSearch.searxngBaseUrl ?? ''}
+              error={searxngAvailable === false ? t('Unable to connect to SearXNG.') : undefined}
+              onChange={(event) => {
                 setSearxngAvailable(undefined)
-                setSettings({
-                  extension: {
-                    ...extension,
-                    webSearch: {
-                      ...extension.webSearch,
-                      searxngBaseUrl: e.currentTarget.value,
-                    },
-                  },
-                })
+                setSettings({ extension: { ...extension, webSearch: { ...extension.webSearch, searxngBaseUrl: event.currentTarget.value } } })
               }}
-              placeholder="https://searx.example.com"
-              error={searxngAvailable === false}
             />
+            <AdaptiveSelect
+              label={t('Authentication')}
+              maw={320}
+              data={[{ value: 'none', label: t('None') }, { value: 'basic', label: t('Basic Authentication') }, { value: 'bearer', label: t('Bearer Token') }]}
+              value={extension.webSearch.searxngAuthType ?? 'none'}
+              onChange={(value) => value && setSettings({ extension: { ...extension, webSearch: { ...extension.webSearch, searxngAuthType: value as 'none' | 'basic' | 'bearer' } } })}
+            />
+            {extension.webSearch.searxngAuthType === 'basic' && (
+              <Flex gap="xs" align="flex-end" wrap="wrap">
+                <TextInput label={t('Username')} value={extension.webSearch.searxngUsername ?? ''} onChange={(event) => setSettings({ extension: { ...extension, webSearch: { ...extension.webSearch, searxngUsername: event.currentTarget.value } } })} />
+                <PasswordInput label={t('Password')} value={extension.webSearch.searxngPassword ?? ''} onChange={(event) => setSettings({ extension: { ...extension, webSearch: { ...extension.webSearch, searxngPassword: event.currentTarget.value } } })} />
+              </Flex>
+            )}
+            {extension.webSearch.searxngAuthType === 'bearer' && (
+              <PasswordInput label={t('Bearer Token')} maw={480} value={extension.webSearch.searxngBearerToken ?? ''} onChange={(event) => setSettings({ extension: { ...extension, webSearch: { ...extension.webSearch, searxngBearerToken: event.currentTarget.value } } })} />
+            )}
+          </Stack>
+          <Flex gap="md" wrap="wrap">
+            <Select label={t('Maximum Results')} data={['5', '10', '15', '20']} value={String(extension.webSearch.searxngMaxResults ?? 10)} onChange={(value) => value && setSettings({ extension: { ...extension, webSearch: { ...extension.webSearch, searxngMaxResults: Number(value) } } })} />
+            <Select label={t('Safe Search')} data={[{ value: '0', label: t('Off') }, { value: '1', label: t('Moderate') }, { value: '2', label: t('Strict') }]} value={String(extension.webSearch.searxngSafeSearch ?? 1)} onChange={(value) => value && setSettings({ extension: { ...extension, webSearch: { ...extension.webSearch, searxngSafeSearch: Number(value) as 0 | 1 | 2 } } })} />
+          </Flex>
+          <Flex align="center" gap="xs">
             <Button
               color="blue"
               variant="light"
@@ -205,22 +244,12 @@ export function RouteComponent() {
             >
               {t('Check')}
             </Button>
-          </Flex>
-          <Text size="xs" c="chatbox-gray">
-            {t('The SearXNG instance must enable JSON output format in search settings.')}
-          </Text>
-
-          {typeof searxngAvailable === 'boolean' ? (
-            searxngAvailable ? (
+            {searxngAvailable === true && (
               <Text size="xs" c="chatbox-success">
                 {t('Connection successful!')}
               </Text>
-            ) : (
-              <Text size="xs" c="chatbox-error">
-                {t('Connection failed!')}
-              </Text>
-            )
-          ) : null}
+            )}
+          </Flex>
         </Stack>
       )}
       {/* Tavily API Key */}

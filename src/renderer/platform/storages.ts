@@ -1,8 +1,7 @@
 import { CapacitorSQLite, SQLiteConnection, type SQLiteDBConnection } from '@capacitor-community/sqlite'
 import localforage from 'localforage'
 import { StorageKey } from '@/storage'
-import platform from '.'
-import type { Storage } from './interfaces'
+import type { PlatformType, Storage } from './interfaces'
 
 export class DesktopFileStorage implements Storage {
   public ipc = window.electronAPI
@@ -328,10 +327,10 @@ export class IndexedDBStorage implements Storage {
   }
 }
 
-export function getOldVersionStorages(): Storage[] {
-  if (platform.type === 'desktop') {
+export function getOldVersionStorages(platformType: PlatformType): Storage[] {
+  if (platformType === 'desktop') {
     return [new DesktopFileStorage()]
-  } else if (platform.type === 'mobile') {
+  } else if (platformType === 'mobile') {
     return [new IndexedDBStorage(), new MobileSQLiteStorage(), new LocalStorage()]
   }
   return [new LocalStorage()]

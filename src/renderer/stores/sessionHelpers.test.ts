@@ -8,6 +8,8 @@ const {
   sessionRagCapabilityState,
   parserState,
   defaultEmbeddingModelState,
+  attachmentProcessingModeState,
+  platformState,
   mockParseFileLocally,
   mockParseFileWithMineru,
   mockGetSessionRagConfig,
@@ -29,6 +31,8 @@ const {
   const defaultEmbeddingModel = {
     value: undefined as { provider: string; model: string } | undefined,
   }
+  const attachmentProcessingMode = { value: 'auto' as 'auto' | 'inline' | 'retrieval' }
+  const platform = { type: 'desktop' as 'desktop' | 'mobile', isDesktopLike: true }
 
   return {
     blobStore: blobs,
@@ -38,6 +42,8 @@ const {
     sessionRagCapabilityState: sessionRagCapability,
     parserState: parser,
     defaultEmbeddingModelState: defaultEmbeddingModel,
+    attachmentProcessingModeState: attachmentProcessingMode,
+    platformState: platform,
     mockParseFileLocally: vi.fn(),
     mockParseFileWithMineru: vi.fn(),
     mockGetSessionRagConfig: vi.fn(async () => ({
@@ -64,8 +70,12 @@ const {
 
 vi.mock('@/platform', () => ({
   default: {
-    type: 'desktop',
-    isDesktopLike: true,
+    get type() {
+      return platformState.type
+    },
+    get isDesktopLike() {
+      return platformState.isDesktopLike
+    },
     parseFileLocally: mockParseFileLocally,
     parseFileWithMineru: mockParseFileWithMineru,
   },
@@ -106,6 +116,7 @@ vi.mock('./settingsStore', () => ({
       licenseKey: licenseState.key,
       licenseActivationMethod: licenseActivationState.method,
       defaultEmbeddingModel: defaultEmbeddingModelState.value,
+      sessionAttachmentProcessingMode: attachmentProcessingModeState.value,
       extension: {
         documentParser: { type: parserState.type, mineru: { apiToken: 'mineru-token' } },
       },
@@ -164,6 +175,7 @@ import {
   isSessionAttachmentRagAuthError,
   isSessionAttachmentRagIndexingError,
   prepareFileAttachment,
+  SESSION_ATTACHMENT_RAG_INLINE_BYTE_THRESHOLD,
   SESSION_ATTACHMENT_RAG_LARGE_ATTACHMENT_WARNING,
   SESSION_ATTACHMENT_RAG_MAX_PARSED_BYTE_LENGTH,
   SESSION_ATTACHMENT_RAG_REQUIRES_CHATBOX_AI_ERROR,
@@ -187,6 +199,9 @@ describe('preprocessFile local parser fallback', () => {
     sessionRagCapabilityState.enabled = true
     parserState.type = 'local'
     defaultEmbeddingModelState.value = undefined
+    attachmentProcessingModeState.value = 'auto'
+    platformState.type = 'desktop'
+    platformState.isDesktopLike = true
     mockParseFileLocally.mockReset()
     mockParseFileWithMineru.mockReset()
     mockGetSessionRagConfig.mockClear()
@@ -674,6 +689,78 @@ describe('preprocessFile local parser fallback', () => {
     expect(result.tokenCountMap?.default).toBe(parsedContent.length)
   })
 
+  it('uses configured embedding retrieval for a mobile attachment when explicitly selected', async () => {
+    platformState.type = 'mobile'
+    platformState.isDesktopLike = false
+    attachmentProcessingModeState.value = 'retrieval'
+    licenseState.key = undefined
+    defaultEmbeddingModelState.value = { provider: 'custom', model: 'embedding-model' }
+    const file = createFile('mobile-retrieval.pdf')
+    const parsedContent = 'mobile searchable content'
+    blobStore.set('local-key', parsedContent)
+    mockParseFileLocally.mockResolvedValueOnce({ isSupported: true, key: 'local-key' })
+
+    const result = await prepareFileAttachment(file, { provider: '', modelId: '' })
+
+    expect(result.error).toBeUndefined()
+    expect(result.ragMode).toBe('session-retrieval')
+    expect(result.tokenCountMap?.default).toBeUndefined()
+    expect(result.tokenCountMap?.default_preview).toBeDefined()
+  })
+
+  it('automatically uses embedding retrieval for a supported large attachment on mobile', async () => {
+    platformState.type = 'mobile'
+    platformState.isDesktopLike = false
+    attachmentProcessingModeState.value = 'auto'
+    licenseState.key = undefined
+    defaultEmbeddingModelState.value = { provider: 'custom', model: 'embedding-model' }
+    const file = createFile('mobile-large.pdf')
+    const parsedContent = 'a'.repeat(SESSION_ATTACHMENT_RAG_INLINE_BYTE_THRESHOLD + 1)
+    blobStore.set('local-key', parsedContent)
+    mockParseFileLocally.mockResolvedValueOnce({ isSupported: true, key: 'local-key' })
+
+    const result = await prepareFileAttachment(file, { provider: '', modelId: '' })
+
+    expect(result.error).toBeUndefined()
+    expect(result.ragMode).toBe('session-retrieval')
+    expect(result.tokenCountMap?.default).toBeUndefined()
+    expect(result.tokenCountMap?.default_preview).toBeDefined()
+  })
+
+  it('automatically keeps a supported small attachment inline on mobile', async () => {
+    platformState.type = 'mobile'
+    platformState.isDesktopLike = false
+    attachmentProcessingModeState.value = 'auto'
+    defaultEmbeddingModelState.value = { provider: 'custom', model: 'embedding-model' }
+    const file = createFile('mobile-small.pdf')
+    const parsedContent = 'a'.repeat(SESSION_ATTACHMENT_RAG_INLINE_BYTE_THRESHOLD)
+    blobStore.set('local-key', parsedContent)
+    mockParseFileLocally.mockResolvedValueOnce({ isSupported: true, key: 'local-key' })
+
+    const result = await prepareFileAttachment(file, { provider: '', modelId: '' })
+
+    expect(result.error).toBeUndefined()
+    expect(result.ragMode).toBe('inline')
+    expect(result.tokenCountMap?.default).toBe(parsedContent.length)
+  })
+
+  it('forces inline full text on mobile even when an embedding model is configured', async () => {
+    platformState.type = 'mobile'
+    platformState.isDesktopLike = false
+    attachmentProcessingModeState.value = 'inline'
+    defaultEmbeddingModelState.value = { provider: 'custom', model: 'embedding-model' }
+    const file = createFile('mobile-inline.pdf')
+    const parsedContent = 'a'.repeat(256 * 1024 + 1)
+    blobStore.set('local-key', parsedContent)
+    mockParseFileLocally.mockResolvedValueOnce({ isSupported: true, key: 'local-key' })
+
+    const result = await prepareFileAttachment(file, { provider: '', modelId: '' })
+
+    expect(result.error).toBeUndefined()
+    expect(result.ragMode).toBe('inline')
+    expect(result.tokenCountMap?.default).toBe(parsedContent.length)
+  })
+
   it('uses session retrieval for over-threshold attachments when session RAG embedding is available', async () => {
     const file = createFile('licensed-large.pdf')
     const parsedContent = 'a'.repeat(256 * 1024 + 1)
@@ -819,6 +906,9 @@ describe('preprocessFile local parser fallback', () => {
   })
 
   it('recognizes raw session RAG indexing failures from existing failed attachments', () => {
+    expect(isSessionAttachmentRagIndexingError('session_attachment_rag_indexing_failed: provider unavailable')).toBe(
+      true
+    )
     expect(isSessionAttachmentRagIndexingError('ai_provider_error')).toBe(true)
     expect(
       isSessionAttachmentRagIndexingError(

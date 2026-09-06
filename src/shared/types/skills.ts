@@ -89,6 +89,9 @@ export const SkillSettingsSchema = z.object({
   translationEnabled: z.boolean().default(true),
   builtinDefaultsInitialized: z.boolean().default(false),
   appliedDefaultBuiltinSkillNames: z.array(z.string()).default([...DEFAULT_ENABLED_BUILTIN_SKILL_NAMES]),
+  mobileDirectoryUri: z.string().optional(),
+  mobileDirectoryName: z.string().optional(),
+  mobileKnownSkillNames: z.array(z.string()).default([]),
 })
 
 // ===== Type Exports =====

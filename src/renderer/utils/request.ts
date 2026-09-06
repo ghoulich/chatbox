@@ -2,7 +2,7 @@ import platform from '@/platform'
 import { ApiError, BaseError, NetworkError } from '../../shared/models/errors'
 import { isLocalHost } from '../../shared/utils/network_utils'
 import { desktopDirectRequestFromWindow } from './desktop-direct-request'
-import { handleMobileRequest } from './mobile-request'
+import { handleMobileRequest, isStreamingRequestBody } from './mobile-request'
 
 interface RequestOptions {
   method: string
@@ -65,7 +65,11 @@ async function doRequest(url: string, options: RequestOptions): Promise<Response
 
   const makeRequest = async () => {
     let res: Response
-    if (platform.type === 'mobile' && useProxy) {
+    const isStreamingRequest = isStreamingRequestBody(body)
+    // Capacitor WebViews are subject to browser CORS for ordinary fetches. Model
+    // embeddings and reranking are non-streaming JSON requests, so route every
+    // mobile API request through the native HTTP bridge as well.
+    if (platform.type === 'mobile') {
       res = await handleMobileRequest(requestUrl, method, headers, body, signal)
     } else if (platform.type === 'desktop' && useProxy && !isLocalHost(url)) {
       res = await desktopDirectRequestFromWindow(requestUrl, method, headers, body, signal)

@@ -342,6 +342,7 @@
     "ofetch": "^1.0.1",
     "officeparser": "5.0.0",
     "sanitize-filename": "^1.6.3",
+    "three": "^0.185.1",
     "ua-parser-js": "^2.0.10",
     "uuid": "^9.0.0"
   },

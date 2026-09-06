@@ -7,6 +7,7 @@ import { Modal } from '@/components/layout/Overlay'
 import { AppTooltip as Tooltip } from '@/components/ui/tooltip'
 import { MCPServer } from '@/packages/mcp/controller'
 import type { MCPServerConfig } from '@/packages/mcp/types'
+import platform from '@/platform'
 import { trackEvent } from '@/utils/track'
 import { getConfigFromFormValues, getFormValuesFromConfig, type MCPServerConfigFormValues } from './utils'
 
@@ -62,7 +63,11 @@ const ConfigForm: FC<{
 
   const form = useForm<MCPServerConfigFormValues>({
     mode: 'controlled',
-    initialValues: getFormValuesFromConfig(props.config),
+    initialValues: getFormValuesFromConfig(
+      platform.type !== 'desktop' && props.config.transport.type === 'stdio'
+        ? { ...props.config, transport: { type: 'http', url: '' } }
+        : props.config
+    ),
   })
 
   const testConnection = async () => {
@@ -70,7 +75,6 @@ const ConfigForm: FC<{
       return
     }
     const config = getConfigFromFormValues(form.getValues())
-    console.debug('Testing connection with config', config)
     setTesting(true)
     setTestingResult(null)
     trackEvent('test_mcp_server_connection', { type: config.transport.type })
@@ -118,7 +122,9 @@ const ConfigForm: FC<{
         >
           <Group>
             <Radio variant="outline" size="sm" value="http" label={t('Remote (http/sse)')} />
-            <Radio variant="outline" size="sm" value="stdio" label={t('Local (stdio)')} />
+            {platform.type === 'desktop' && (
+              <Radio variant="outline" size="sm" value="stdio" label={t('Local (stdio)')} />
+            )}
           </Group>
         </Radio.Group>
         <Stack gap={4}>

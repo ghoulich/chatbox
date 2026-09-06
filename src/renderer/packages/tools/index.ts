@@ -41,6 +41,15 @@ function getChatboxCliToolName(input: unknown): string {
 
 export function getToolName(toolName: string, input?: unknown): string {
   if (toolName === 'chatbox_cli') return getChatboxCliToolName(input)
+  if (toolName === 'load_skill' && input && typeof input === 'object') {
+    const name = (input as Record<string, unknown>).name
+    if (typeof name === 'string' && name.trim()) return `${t('Skill')} · ${name}`
+  }
+  if (toolName.startsWith('mcp__')) {
+    const [, serverName, ...toolParts] = toolName.split('__')
+    if (serverName && toolParts.length > 0) return `MCP · ${serverName} · ${toolParts.join('__')}`
+    return `MCP · ${toolName.slice(5)}`
+  }
   // Use translation keys that i18next cli can detect
   const toolNames: Record<string, string> = {
     query_knowledge_base: t('Query Knowledge Base'),
@@ -48,6 +57,9 @@ export function getToolName(toolName: string, input?: unknown): string {
     read_file_chunks: t('Read File Chunks'),
     list_files: t('List Files'),
     web_search: t('Web Search'),
+    image_search: t('Image Search'),
+    video_search: t('Video Search'),
+    create_threejs_animation: t('Interactive Animation'),
     file_search: t('File Search'),
     code_search: t('Code Search'),
     terminal: t('Terminal'),
@@ -74,6 +86,18 @@ export function getToolName(toolName: string, input?: unknown): string {
     user_exec: t('Run Command'),
     parse_file: t('Parse File'),
     view_image: t('View Image'),
+    net_info: t('Network Information'),
+    ping: t('Ping'),
+    tcp_ping: t('TCP Ping'),
+    dns_lookup: t('DNS Lookup'),
+    http_probe: t('HTTP Probe'),
+    mdns_discover: t('mDNS Discovery'),
+    lan_scan: t('LAN Scan'),
+    wifi_scan: t('Wi-Fi Scan'),
+    speedtest: t('Speed Test'),
+    ssh: t('SSH Command'),
+    snmp_get: t('SNMP Get'),
+    snmp_walk: t('SNMP Walk'),
   }
 
   return toolNames[toolName] || toolName

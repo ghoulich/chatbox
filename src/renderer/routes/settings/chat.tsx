@@ -1,9 +1,9 @@
-import { Box, Button, FileButton, Flex, Slider, Stack, Switch, Text, Textarea, Title } from '@mantine/core'
+import { Box, Button, FileButton, Flex, Select, Slider, Stack, Switch, Text, Textarea, Title } from '@mantine/core'
 import { TestId } from '@shared/automation/testids'
 import { chatSessionSettings, getDefaultPrompt } from '@shared/defaults'
 import { MAX_TOOL_CALLS_BEFORE_CONFIRMATION } from '@shared/utils/tool-call-limit-pause'
 import { createFileRoute } from '@tanstack/react-router'
-import { useMemo } from 'react'
+import { useMemo, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AssistantAvatar, UserAvatar } from '@/components/common/Avatar'
 import { Divider } from '@/components/common/Divider'
@@ -13,6 +13,8 @@ import SliderWithInput from '@/components/common/SliderWithInput'
 import { TooltipInfoTrigger } from '@/components/common/TooltipInfoTrigger'
 import { handleImageInputAndSave, ImageInStorage } from '@/components/Image'
 import { AppTooltip as Tooltip } from '@/components/ui/tooltip'
+import { getBackgroundGenerationStatus, subscribeBackgroundGenerationStatus } from '@/native/background-generation'
+import platform from '@/platform'
 import storage from '@/storage'
 import { StorageKeyGenerator } from '@/storage/StoreStorage'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -27,6 +29,11 @@ export const Route = createFileRoute('/settings/chat')({
 export function RouteComponent() {
   const { t } = useTranslation()
   const { setSettings, ...settings } = useSettingsStore((state) => state)
+  const backgroundGenerationStatus = useSyncExternalStore(
+    subscribeBackgroundGenerationStatus,
+    getBackgroundGenerationStatus,
+    getBackgroundGenerationStatus
+  )
 
   return (
     <Stack gap="xxl" p="md">
@@ -169,6 +176,34 @@ export function RouteComponent() {
           }
           onChange={(v) => setSettings({ maxContextMessageCount: v })}
         />
+
+        <Flex align="center" justify="space-between" gap="md">
+          <Text size="sm">{t('Enable Web Search for New Conversations')}</Text>
+          <Switch
+            checked={settings.defaultWebBrowsing ?? false}
+            onChange={(event) => setSettings({ defaultWebBrowsing: event.currentTarget.checked })}
+          />
+        </Flex>
+
+        <Stack gap="xxs">
+          <Text size="sm">{t('Default Reasoning Effort for New Conversations')}</Text>
+          <Select
+            value={settings.defaultReasoningLevel ?? 'default'}
+            data={[
+              { value: 'default', label: t('Default') },
+              { value: 'off', label: t('Off') },
+              { value: 'low', label: t('Low') },
+              { value: 'medium', label: t('Medium') },
+              { value: 'high', label: t('High') },
+            ]}
+            allowDeselect={false}
+            onChange={(value) =>
+              setSettings({
+                defaultReasoningLevel: (value ?? 'default') as 'default' | 'off' | 'low' | 'medium' | 'high',
+              })
+            }
+          />
+        </Stack>
 
         {/* Temperature */}
         <Stack gap="xxs">
@@ -469,6 +504,51 @@ export function RouteComponent() {
               setSettings({
                 ...settings,
                 enableMermaidRendering: !settings.enableMermaidRendering,
+              })
+            }
+          />
+          {platform.type === 'mobile' && (
+            <Stack gap={4}>
+              <Switch
+                label={t('Continue generating in background')}
+                description={t(
+                  'Keep an active response running while the screen is off or Chatbox is in the background. Android will show a notification and battery use may increase.'
+                )}
+                checked={settings.backgroundGenerationEnabled}
+                onChange={() =>
+                  setSettings({
+                    backgroundGenerationEnabled: !settings.backgroundGenerationEnabled,
+                  })
+                }
+              />
+              {settings.backgroundGenerationEnabled && (
+                <Text size="xs" c={backgroundGenerationStatus.state === 'unavailable' ? 'red' : 'chatbox-tertiary'}>
+                  {backgroundGenerationStatus.state === 'active'
+                    ? t('Background protection is active ({{count}} active response(s)).', {
+                        count: backgroundGenerationStatus.activeCount,
+                      })
+                    : backgroundGenerationStatus.state === 'starting'
+                      ? t('Starting background protection…')
+                      : backgroundGenerationStatus.state === 'unavailable'
+                        ? `${t(
+                            'Background protection failed to start; responses are not protected while Chatbox is in the background.'
+                          )} ${t('Last error: {{reason}}', {
+                            reason: backgroundGenerationStatus.lastError || t('Unknown error'),
+                          })}`
+                        : t('Ready; background protection starts while a response is being generated.')}
+                </Text>
+              )}
+            </Stack>
+          )}
+          <Switch
+            label={t('Interactive Three.js animations')}
+            description={t(
+              'Allow tool-capable models to create locally rendered, sandboxed interactive animations in answers.'
+            )}
+            checked={settings.interactiveAnimationsEnabled}
+            onChange={() =>
+              setSettings({
+                interactiveAnimationsEnabled: !settings.interactiveAnimationsEnabled,
               })
             }
           />

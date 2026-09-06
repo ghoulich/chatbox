@@ -91,6 +91,23 @@ describe('resolveSessionPromptContextSnapshot', () => {
     matchesDirectories.mockReturnValue(false)
   })
 
+  test('captures a chat snapshot for mobile Soul even without memories', async () => {
+    const captured = snapshot(1, { scope: 'chat', soul: 'Mobile Soul' })
+    captureSnapshot.mockResolvedValue(captured)
+
+    const result = await resolveSessionPromptContextSnapshot({
+      effectiveAgentMode: 'off',
+      memoryEnabled: true,
+      includeSoulInChatMode: true,
+      settings: {},
+      messages: [],
+      targetMsgIx: 0,
+    })
+
+    expect(result?.soul).toBe('Mobile Soul')
+    expect(captureSnapshot).toHaveBeenCalledWith(undefined, 'chat', { type: 'global' })
+  })
+
   test.each([
     [2, 1],
     [1, 2],

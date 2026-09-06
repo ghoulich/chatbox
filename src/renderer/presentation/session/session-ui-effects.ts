@@ -2,6 +2,7 @@ import type { SessionApplicationEvent, SessionEventBus } from '@chatbox/core/app
 import { rendererApplication } from '@/app/renderer-application'
 import { clearScrollPositionCache } from '@/components/chat/MessageList'
 import platform from '@/platform'
+import { supportsSessionAttachmentRag } from '@/platform/session-attachment-rag/support'
 import { cleanupSessionAtomCache } from '@/stores/atoms/throttleWriteSessionAtom'
 import { clearSessionNameGenerationState, syncSessionAutoTitle } from '@/stores/session/naming'
 import { clearSessionActivity } from '@/stores/sessionActivityStore'
@@ -14,7 +15,7 @@ async function runInChunks<T>(items: T[], chunkSize: number, worker: (item: T) =
 }
 
 async function cleanupAttachmentRagEntries(event: Extract<SessionApplicationEvent, { type: 'session-will-delete' }>) {
-  if (!platform.isDesktopLike) return
+  if (!supportsSessionAttachmentRag(platform.type)) return
   await runInChunks(event.ids, 10, async (sessionId) => {
     try {
       await platform.getSessionAttachmentRagController().deleteSessionAttachments(sessionId)

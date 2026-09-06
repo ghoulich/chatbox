@@ -20,6 +20,7 @@ interface UseReasoningControlStateOptions {
   isNewSession: boolean
   model?: SelectedModel
   providers: ProviderInfo[]
+  defaultReasoningLevel?: ReasoningControlLevel
   sessionProviderOptions?: ProviderOptions
 }
 
@@ -78,6 +79,7 @@ export function useReasoningControlState({
   isNewSession,
   model,
   providers,
+  defaultReasoningLevel = 'default',
   sessionProviderOptions,
 }: UseReasoningControlStateOptions): ReasoningControlState {
   const [providerOptionsOverride, setProviderOptionsOverride] = useState<ProviderOptions | undefined>(undefined)
@@ -144,11 +146,20 @@ export function useReasoningControlState({
   }, [model, modelInfo, modelKey, selectedProviderInfo])
 
   const currentDraft = isNewSession ? draftByModel[modelKey] : undefined
+  const defaultProviderOptions = useMemo(
+    () =>
+      isNewSession && modelKey && defaultReasoningLevel !== 'default'
+        ? getReasoningProviderOptions(model?.provider, reasoningModelInfo, defaultReasoningLevel)
+        : undefined,
+    [defaultReasoningLevel, isNewSession, model?.provider, modelKey, reasoningModelInfo]
+  )
   const effectiveProviderOptions = currentDraft
     ? currentDraft.options
     : isDirty
       ? providerOptionsOverride
-      : sessionProviderOptions
+      : isNewSession && defaultReasoningLevel !== 'default'
+        ? defaultProviderOptions
+        : sessionProviderOptions
   // Existing sessions persist level changes directly (see handleReasoningLevelChange);
   // the patch is only needed when the session does not exist yet and will be created on
   // submit. It carries every per-model draft; 'default' drafts need no entry since a
@@ -159,9 +170,12 @@ export function useReasoningControlState({
     for (const [key, entry] of Object.entries(draftByModel)) {
       if (entry.options) byModel[key] = entry.options
     }
+    if (!draftByModel[modelKey] && defaultProviderOptions) {
+      byModel[modelKey] = defaultProviderOptions
+    }
     if (Object.keys(byModel).length === 0) return undefined
     return { providerOptionsByModel: byModel }
-  }, [isNewSession, draftByModel])
+  }, [isNewSession, draftByModel, modelKey, defaultProviderOptions])
 
   const persistProviderOptions = useCallback(
     async (sessionId: string, nextProviderOptions?: ProviderOptions) => {

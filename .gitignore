@@ -180,6 +180,19 @@ electron-builder.env
 
 .env.sentry-build-plugin
 
+# Local Android release artifacts and signing material
+*.apk
+*.aab
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.mobileprovision
+*.xcarchive
+*.sqlite
+*.sqlite3
+*.db
+
 temp.md
 /output/playwright/
 .playwright-cli/

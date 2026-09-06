@@ -74,6 +74,13 @@ import ActionMenu, { type ActionMenuItemProps } from '../ActionMenu'
 import { AssistantAvatar, SystemAvatar, UserAvatar } from '../common/Avatar'
 import { ScalableIcon } from '../common/ScalableIcon'
 import Loading from '../icons/Loading'
+import { collectImageSearchResults } from '../message-parts/ImageSearchResultGallery'
+import {
+  collectVideoSearchResults,
+  selectUnreferencedVideoSearchResults,
+  VideoSearchResultGallery,
+} from '../message-parts/InlineSearchMedia'
+import { collectThreeJsAnimations } from '../message-parts/InlineThreeJsAnimation'
 import { MessageArtifactsUI, ReasoningContentUI, StepTimelineUI, ToolCallPartUI } from '../message-parts/ToolCallPartUI'
 import { MessageAttachmentGrid } from './MessageAttachmentGrid'
 import MessageErrTips from './MessageErrTips'
@@ -542,6 +549,21 @@ const _Message: FC<Props> = (props) => {
       ),
     [contentParts]
   )
+  const finalImageSearchResults = useMemo(() => collectImageSearchResults(contentParts), [contentParts])
+  const finalVideoSearchResults = useMemo(() => collectVideoSearchResults(contentParts), [contentParts])
+  const answerText = useMemo(
+    () =>
+      contentParts
+        .filter((part): part is MessageTextPart => part.type === 'text')
+        .map((part) => part.text)
+        .join('\n'),
+    [contentParts]
+  )
+  const fallbackVideoSearchResults = useMemo(
+    () => selectUnreferencedVideoSearchResults(finalVideoSearchResults, answerText),
+    [answerText, finalVideoSearchResults]
+  )
+  const finalThreeJsAnimations = useMemo(() => collectThreeJsAnimations(contentParts), [contentParts])
 
   // Normalize provider-specific non-streaming reasoning order before deciding
   // which text belongs to the process timeline and which text is the final answer.
@@ -869,6 +891,9 @@ const _Message: FC<Props> = (props) => {
                           generating={msg.generating}
                           onCodeCopy={onCodeCopy}
                           onPreviewWebpage={onPreviewWebpage}
+                          imageSearchResults={finalImageSearchResults}
+                          videoSearchResults={finalVideoSearchResults}
+                          threeJsAnimations={finalThreeJsAnimations}
                         >
                           {item.text || ''}
                         </Markdown>
@@ -1011,6 +1036,9 @@ const _Message: FC<Props> = (props) => {
                       messageId={msg.id}
                     />
                   ) : null
+                )}
+                {msg.role === 'assistant' && !msg.generating && fallbackVideoSearchResults.length > 0 && (
+                  <VideoSearchResultGallery results={fallbackVideoSearchResults} />
                 )}
               </div>
             ))}

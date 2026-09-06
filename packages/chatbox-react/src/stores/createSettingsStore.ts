@@ -46,7 +46,11 @@ function createSettingsUpdate(current: Settings, candidate: unknown): Partial<Se
 
 function applySettingsAction(current: Settings, update: SettingsActionUpdate): Partial<Settings> {
   if (typeof update !== 'function') {
-    return update
+    // Some renderer screens spread the complete Zustand state into setSettings().
+    // That state also contains store actions and hydration metadata. Only forward
+    // schema-backed Settings fields to SettingsService; otherwise an action such
+    // as getSettings can be published back as undefined and disappear at runtime.
+    return createSettingsUpdate(current, { ...current, ...update })
   }
   return createSettingsUpdate(current, produce(current, update))
 }

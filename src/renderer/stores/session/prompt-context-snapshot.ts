@@ -22,6 +22,8 @@ export interface ResolveSessionPromptContextSnapshotOptions {
   persist?: (snapshot: SessionPromptContextSnapshot) => void
   /** When set, the session system prompt is frozen into Soul as a Copilot overlay. */
   copilotId?: string
+  /** Load the global Soul even though this request remains in Chat Mode. */
+  includeSoulInChatMode?: boolean
 }
 
 export function extractCopilotPersona(messages: Message[], targetMsgIx: number): string | undefined {
@@ -119,6 +121,7 @@ export async function resolveSessionPromptContextSnapshot(
     targetMsgIx,
     persist,
     copilotId,
+    includeSoulInChatMode = false,
   } = options
   const memoryScope = options.memoryScope ?? { type: 'global' }
   const existing = settings.sessionPromptContextSnapshot
@@ -173,7 +176,7 @@ export async function resolveSessionPromptContextSnapshot(
     return reloaded
   }
   const needsMemoryStateSnapshot = Boolean(
-    copilotId || memoryScope.type === 'copilot' || !memoryEnabled || memoryStateToken !== ''
+    includeSoulInChatMode || copilotId || memoryScope.type === 'copilot' || !memoryEnabled || memoryStateToken !== ''
   )
   if (
     needsMemoryStateSnapshot ||

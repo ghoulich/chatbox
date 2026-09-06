@@ -42,8 +42,11 @@ vi.mock('./searxng', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./searxng')>()
   return {
     ...actual,
-    SearxngSearch: class {
-      constructor(private readonly baseUrl: string) {}
+    SearXNGSearch: class {
+      readonly baseUrl: string
+      constructor(options: { baseUrl: string }) {
+        this.baseUrl = actual.normalizeSearXNGBaseUrl(options.baseUrl)
+      }
       search = vi.fn().mockImplementation(async () => ({
         items: [{ title: `SearXNG Result ${this.baseUrl}`, snippet: 'test', link: 'https://example.com' }],
       }))

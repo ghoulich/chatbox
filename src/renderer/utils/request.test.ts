@@ -8,7 +8,17 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/platform', () => ({ default: mocks.platform }))
 vi.mock('./desktop-direct-request', () => ({ desktopDirectRequestFromWindow: mocks.desktopDirectRequest }))
-vi.mock('./mobile-request', () => ({ handleMobileRequest: mocks.mobileRequest }))
+vi.mock('./mobile-request', () => ({
+  handleMobileRequest: mocks.mobileRequest,
+  isStreamingRequestBody: (body: RequestInit['body'] | undefined) => {
+    if (typeof body !== 'string') return false
+    try {
+      return JSON.parse(body).stream === true
+    } catch {
+      return false
+    }
+  },
+}))
 
 import { apiRequest } from './request'
 
@@ -60,6 +70,30 @@ describe('provider API request routing', () => {
       expect.objectContaining({ method: 'GET' })
     )
     expect(mocks.desktopDirectRequest).not.toHaveBeenCalled()
+  })
+
+  it('uses the native transport for non-streaming mobile model requests', async () => {
+    mocks.platform.type = 'mobile'
+    const response = new Response('{"data":[]}')
+    mocks.mobileRequest.mockResolvedValue(response)
+    const rendererFetch = vi.fn()
+    vi.stubGlobal('fetch', rendererFetch)
+
+    await expect(
+      apiRequest.post('https://provider.example/v1/embeddings', {}, '{"input":["hello"]}', {
+        useProxy: false,
+        retry: 0,
+      })
+    ).resolves.toBe(response)
+
+    expect(mocks.mobileRequest).toHaveBeenCalledWith(
+      'https://provider.example/v1/embeddings',
+      'POST',
+      expect.any(Headers),
+      '{"input":["hello"]}',
+      undefined
+    )
+    expect(rendererFetch).not.toHaveBeenCalled()
   })
 
   it('preserves the ApiError contract for failed desktop direct responses', async () => {

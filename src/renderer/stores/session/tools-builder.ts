@@ -1,6 +1,13 @@
 import type { ModelInterface } from '@shared/models/types'
 import type { SandboxSeedAttachment } from '@shared/sandbox/attachment-path'
 import type { SandboxProvider } from '@shared/sandbox-provider'
+import {
+  buildVisualizationDisplayInstruction,
+  createThreeJsAnimationTool,
+  MERMAID_DIAGRAM_INSTRUCTION,
+  THREEJS_ANIMATION_TOOLSET_INSTRUCTION,
+  type VisualizationDisplayContext,
+} from '@shared/threejs-animation-tool'
 import { supportsToolResultImages } from '@shared/tools/view-image'
 import type { KnowledgeBase, Message, SessionSettings, Settings } from '@shared/types'
 import type { MemoryScope } from '@shared/types/agent-persona'
@@ -19,11 +26,18 @@ import fileToolSet from '@/packages/model-calls/toolsets/file'
 import { buildFilesystemTools } from '@/packages/model-calls/toolsets/filesystem'
 import { getToolSet as getKBToolSet } from '@/packages/model-calls/toolsets/knowledge-base'
 import { asRecord, numberField, stringField, toTextModelOutput } from '@/packages/model-calls/toolsets/model-output'
+import { buildNetworkTools, getNetworkToolsInstruction } from '@/packages/model-calls/toolsets/network-tools'
 import { buildRunCommandTool } from '@/packages/model-calls/toolsets/run-command'
 import { remapPhantomHomePath } from '@/packages/model-calls/toolsets/sandbox-paths'
 import { getToolSet as getSessionAttachmentRagToolSet } from '@/packages/model-calls/toolsets/session-attachment-rag'
 import { buildViewImageToolSet, isViewImageAvailable } from '@/packages/model-calls/toolsets/view-image'
-import { getToolSetDescription, parseLinkTool, webSearchTool } from '@/packages/model-calls/toolsets/web-search'
+import {
+  getToolSetDescription,
+  imageSearchTool,
+  parseLinkTool,
+  videoSearchTool,
+  webSearchTool,
+} from '@/packages/model-calls/toolsets/web-search'
 import { buildWorkspaceInstructions } from '@/packages/model-calls/workspace-instructions'
 import { skillsController, subscribeSkillsChanged } from '@/packages/skills/controller'
 import {
@@ -107,6 +121,23 @@ export interface BuildToolsResult {
    * Callers wire it into prepareStep's `messages` override.
    */
   prepareStepMessages?: (messages: ModelMessage[]) => Promise<ModelMessage[]>
+}
+
+function getCurrentVisualizationDisplayContext(): VisualizationDisplayContext | undefined {
+  if (typeof window === 'undefined') return undefined
+  const visualViewport = window.visualViewport
+  const viewportWidth = Math.round(visualViewport?.width || window.innerWidth || 0)
+  const viewportHeight = Math.round(visualViewport?.height || window.innerHeight || 0)
+  if (viewportWidth <= 0 || viewportHeight <= 0) return undefined
+  const coarsePointer = typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches
+  const hasTouch = platform.type === 'mobile' || (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0)
+  return {
+    viewportWidth,
+    viewportHeight,
+    orientation: viewportWidth > viewportHeight ? 'landscape' : viewportHeight > viewportWidth ? 'portrait' : 'square',
+    input: coarsePointer || hasTouch ? 'touch' : 'pointer',
+    devicePixelRatio: Math.max(1, Math.min(4, Math.round((window.devicePixelRatio || 1) * 10) / 10)),
+  }
 }
 
 /**
@@ -266,6 +297,19 @@ The skill will be auto-enabled after installation.
   return instruction
 }
 
+function buildMobileSkillToolsInstruction(enabledSkills: Array<{ name: string; description: string }>): string {
+  return `
+## Skills
+The user has enabled the following read-only prompt skills from a directory on this mobile device:
+${enabledSkills.map((skill) => `- **${skill.name}**: ${skill.description}`).join('\n')}
+
+When the user's request matches a skill's purpose, call load_skill to load its full instructions before proceeding.
+Before any web_search, image_search, or video_search call, first load every enabled skill whose name or description concerns search strategy, SearXNG, or search providers. Apply its routing rules and pass any required engine whitelist to the search tool.
+Follow the loaded prompt instructions, and use available local tools or MCP tools when the skill or the task requires them.
+Mobile skills cannot execute local scripts, install software, or access files other than the loaded SKILL.md text.
+`
+}
+
 function formatLoadSkillOutput(output: unknown): string {
   const record = asRecord(output)
   const error = stringField(record, 'error')
@@ -342,12 +386,18 @@ export async function buildToolsForSession(
   const legacyCommandTools = agentToolContractVersion === 1
   const commandApprovalMode = resolveCommandApprovalMode(options.sessionSettings ?? {})
 
-  // Agent mode tools require model to support the 'agent' scope.
+  // Desktop Work Mode tools require model to support the 'agent' scope.
   // Models with weak function calling (e.g. DeepSeek V3/R1) return false here,
   // so they won't get agent-specific tools (MCP, sandbox, skills, code execution).
   // Web search and Knowledge Base are independent — they work outside agent mode.
   const modelSupportsAgentTools = model.isSupportToolUse('agent')
+  const modelSupportsBasicTools = model.isSupportToolUse()
   const includeAgentTools = agentMode === 'on' && modelSupportsAgentTools
+  // Mobile does not have desktop Work Mode, but read-only prompt Skills are safe
+  // and useful in Chat Mode for every model with ordinary function calling.
+  const includeMobileSkills = platform.type === 'mobile' && modelSupportsBasicTools
+  const includeLocalNetworkTools =
+    platform.type === 'mobile' && modelSupportsAgentTools && settingsStore.getState().networkTools?.enabled !== false
 
   const hasInlineFileOrLink = messages.some(
     (m) => m.links?.length || m.files?.some((file) => file.ragMode !== 'session-retrieval')
@@ -360,6 +410,11 @@ export async function buildToolsForSession(
   const webSupported = webBrowsing && model.isSupportToolUse('web-browsing')
   const searchProvider = settingActions.getExtensionSettings().webSearch.provider
   const includeParseLinkTool = webSupported && PROVIDERS_WITH_PARSE_LINK.has(searchProvider)
+  const includeImageSearchTool = webSupported && searchProvider === 'searxng'
+  const includeVideoSearchTool = webSupported && searchProvider === 'searxng'
+  const includeThreeJsAnimationTool =
+    model.isSupportToolUse() && settingsStore.getState().interactiveAnimationsEnabled !== false
+  const includeMermaidInstruction = settingsStore.getState().enableMermaidRendering !== false
 
   let kbToolSet: Awaited<ReturnType<typeof getKBToolSet>> | null = null
   if (knowledgeBase && kbSupported) {
@@ -406,7 +461,20 @@ When you create a Git commit that includes code changes, append this exact trail
     instructions += fileToolSet.description
   }
   if (webSupported) {
-    instructions += getToolSetDescription({ includeParseLink: includeParseLinkTool })
+    instructions += getToolSetDescription({
+      includeParseLink: includeParseLinkTool,
+      includeImageSearch: includeImageSearchTool,
+      includeVideoSearch: includeVideoSearchTool,
+    })
+  }
+  if (includeMermaidInstruction) {
+    instructions += MERMAID_DIAGRAM_INSTRUCTION
+  }
+  if (includeThreeJsAnimationTool) {
+    instructions += THREEJS_ANIMATION_TOOLSET_INSTRUCTION
+  }
+  if (includeMermaidInstruction || includeThreeJsAnimationTool) {
+    instructions += buildVisualizationDisplayInstruction(getCurrentVisualizationDisplayContext())
   }
 
   let codeExecToolSet: ReturnType<typeof buildCodeExecutionTools> | null = null
@@ -438,19 +506,37 @@ When you create a Git commit that includes code changes, append this exact trail
 
   let tools: ToolSet = {}
 
-  // MCP tools: agent mode only, requires model support
-  if (includeAgentTools) {
-    tools = { ...mcpController.getAvailableTools() }
+  if (includeLocalNetworkTools) {
+    instructions += getNetworkToolsInstruction()
+    tools = { ...tools, ...buildNetworkTools() }
+  }
+
+  // Desktop keeps MCP under Work Mode. Mobile has no desktop sandbox/Work Mode,
+  // so enabled remote MCP servers are exposed independently to tool-capable models.
+  if (includeAgentTools || (platform.type === 'mobile' && modelSupportsBasicTools)) {
+    tools = { ...tools, ...mcpController.getAvailableTools({ remoteOnly: platform.type === 'mobile' }) }
   }
 
   // Web search: works independently of agent mode
   if (webBrowsing && webSupported) {
     tools.web_search = webSearchTool
+    if (includeImageSearchTool) {
+      tools.image_search = imageSearchTool
+    }
+    if (includeVideoSearchTool) {
+      tools.video_search = videoSearchTool
+    }
     // Inject parse_link based on the selected provider's declared capability.
     // Validation (Pro for build-in, API key for third parties) happens at execution time.
     if (includeParseLinkTool) {
       tools.parse_link = parseLinkTool
     }
+  }
+
+  // Interactive animations are local presentation tools and do not require
+  // Work Mode, web browsing, MCP, or a network sandbox.
+  if (includeThreeJsAnimationTool) {
+    tools.create_threejs_animation = createThreeJsAnimationTool()
   }
 
   if (kbToolSet && kbSupported) {
@@ -550,23 +636,28 @@ When you create a Git commit that includes code changes, append this exact trail
     tools = { ...tools, ...filesystemToolSet.tools }
   }
 
-  // Skills tools: agent mode only, requires model support
-  if (includeAgentTools) {
+  // Desktop Skills belong to Work Mode. Mobile Skills are read-only prompt
+  // instructions and are available independently in Chat Mode.
+  if (includeAgentTools || includeMobileSkills) {
     const allSkills = await getDiscoveredSkills()
     const skillSettings = settingsStore.getState().getSettings().skills
     const enabledSkills = allSkills.filter((s) => skillSettings.enabledSkillNames.includes(s.name))
-    const userExecWorkingDirectory = options.sessionSettings?.workingDirectories?.find((dir) => dir.trim().length > 0)
-    instructions += buildSkillToolsInstruction(
-      enabledSkills,
-      commandApprovalMode === 'full_access',
-      userExecWorkingDirectory,
-      legacyCommandTools,
-      harmonyNodeExecution,
-      sandboxCodeExecutionFallback,
-      sandboxWorkingDirectory
-    )
+    if (includeMobileSkills) {
+      instructions += buildMobileSkillToolsInstruction(enabledSkills)
+    } else {
+      const userExecWorkingDirectory = options.sessionSettings?.workingDirectories?.find((dir) => dir.trim().length > 0)
+      instructions += buildSkillToolsInstruction(
+        enabledSkills,
+        commandApprovalMode === 'full_access',
+        userExecWorkingDirectory,
+        legacyCommandTools,
+        harmonyNodeExecution,
+        sandboxCodeExecutionFallback,
+        sandboxWorkingDirectory
+      )
+    }
     tools.load_skill = buildLoadSkillTool(options)
-    if (enabledSkills.some((skill) => skill.name === 'chatbox-product-info')) {
+    if (includeAgentTools && enabledSkills.some((skill) => skill.name === 'chatbox-product-info')) {
       const chatboxCliToolSet = buildChatboxCliToolSet({
         sessionId: options.sessionId,
         onUsed: options.onAgentModeActivated,
@@ -574,8 +665,8 @@ When you create a Git commit that includes code changes, append this exact trail
       instructions += chatboxCliToolSet.description
       tools = { ...tools, ...chatboxCliToolSet.tools }
     }
-    if (legacyCommandTools) tools.user_exec = buildUserExecTool(options)
-    if (codeExecution) {
+    if (includeAgentTools && legacyCommandTools) tools.user_exec = buildUserExecTool(options)
+    if (includeAgentTools && codeExecution) {
       tools.install_skill = buildInstallSkillTool(
         options,
         legacyCommandTools || sandboxCodeExecutionFallback,
@@ -639,11 +730,14 @@ function buildLoadSkillTool(options: BuildToolsOptions): ToolSet[string] {
         return { error: `Skill "${skillInput.name}" not found or could not be loaded.` }
       }
 
-      // Trigger agent mode activation
-      try {
-        options.onAgentModeActivated?.()
-      } catch (err) {
-        console.warn('onAgentModeActivated callback failed:', err)
+      // Desktop Skills activate Work Mode. Mobile Skills are intentionally
+      // read-only and do not turn on desktop-only sandbox features.
+      if (platform.type !== 'mobile') {
+        try {
+          options.onAgentModeActivated?.()
+        } catch (err) {
+          console.warn('onAgentModeActivated callback failed:', err)
+        }
       }
 
       return {

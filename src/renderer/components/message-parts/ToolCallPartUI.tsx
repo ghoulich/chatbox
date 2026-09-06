@@ -44,6 +44,7 @@ import {
   IconSparkles,
   IconTerminal,
   IconWorld,
+  IconNetwork,
   IconWriting,
   IconX,
 } from '@tabler/icons-react'
@@ -75,6 +76,8 @@ import {
 import * as toastActions from '@/stores/toastActions'
 import { useUIStore } from '@/stores/uiStore'
 import { inlineSandboxHtmlAssets } from './html-artifact-assets'
+import { extractImageSearchResults, ImageSearchResultGallery } from './ImageSearchResultGallery'
+import { extractVideoSearchResults } from './InlineSearchMedia'
 import { getLocalFileName, localFilePathToUrl } from './local-file-url'
 import { ReasoningInlineSummary } from './ReasoningInlineSummary'
 import { ToolUnavailableCard } from './ToolUnavailableCard'
@@ -231,6 +234,9 @@ function usePausedStepElementRegistration(
 
 const toolIconMap: Record<string, React.ElementType> = {
   web_search: IconWorld,
+  image_search: IconPhoto,
+  video_search: IconPlayerPlay,
+  create_threejs_animation: IconPlayerPlay,
   terminal: IconTerminal,
   code_search: IconFileSearch,
   file_search: IconFileSearch,
@@ -558,6 +564,126 @@ export const WebSearchGroupUI: FC<{ parts: MessageToolCallPart[] }> = ({ parts }
           <ToolCallErrorDetails part={errorPart} />
         </Box>
       )}
+    </Stack>
+  )
+}
+
+const ImageSearchDetails: FC<{ part: MessageToolCallPart }> = ({ part }) => {
+  const { t } = useTranslation()
+  if (part.state === 'error') return <ToolCallErrorDetails part={part} />
+  const results = extractImageSearchResults(part.result)
+  const queries = extractSearchQueries([part])
+  const showInReasoning =
+    typeof part.args === 'object' &&
+    part.args !== null &&
+    (part.args as Record<string, unknown>).showInReasoning === true
+  return (
+    <Stack gap={6}>
+      {queries.map((query, index) => (
+        <Text key={`${index}-${query}`} size="xs" c="chatbox-tertiary" fs="italic">
+          "{query}"
+        </Text>
+      ))}
+      {results.length > 0 && showInReasoning ? (
+        <ImageSearchResultGallery results={results} />
+      ) : results.length > 0 ? (
+        <Stack gap={6}>
+          {results.map((result, index) => (
+            <Box key={`${result.imageUrl}-${index}`}>
+              <Text size="xs" c="chatbox-secondary" lineClamp={1}>
+                {result.title}
+              </Text>
+              <Code block className="break-all text-xs">
+                {result.imageUrl}
+              </Code>
+            </Box>
+          ))}
+        </Stack>
+      ) : part.state === 'result' ? (
+        <Text size="sm" c="chatbox-tertiary">
+          {t('No images found')}
+        </Text>
+      ) : null}
+    </Stack>
+  )
+}
+
+const ImageSearchUI: FC<{ part: MessageToolCallPart }> = ({ part }) => {
+  const { t } = useTranslation()
+  const count = extractImageSearchResults(part.result).length
+  const [expanded, setExpanded] = useAutoExpandOnSignal(part.state === 'result' && count > 0)
+  const summary = count > 0 ? t('{{count}} images', { count }) : undefined
+  return (
+    <Stack gap={4} mb={4}>
+      <ToolCallPill part={part} summary={summary} onClick={() => setExpanded((value) => !value)} expanded={expanded} />
+      <Collapse in={expanded}>
+        <Box ml={4} pl="sm" style={{ borderLeft: '2px solid var(--chatbox-tint-success)' }}>
+          <ImageSearchDetails part={part} />
+        </Box>
+      </Collapse>
+    </Stack>
+  )
+}
+
+const VideoSearchDetails: FC<{ part: MessageToolCallPart }> = ({ part }) => {
+  const { t } = useTranslation()
+  if (part.state === 'error') return <ToolCallErrorDetails part={part} />
+  const results = extractVideoSearchResults(part.result)
+  const queries = extractSearchQueries([part])
+  const directCount = results.filter((result) => result.playbackMode !== 'webpage').length
+  return (
+    <Stack gap={6}>
+      {queries.map((query, index) => (
+        <Text key={`${index}-${query}`} size="xs" c="chatbox-tertiary" fs="italic">
+          "{query}"
+        </Text>
+      ))}
+      {results.length > 0 ? (
+        <Stack gap={6}>
+          <Text size="xs" c="chatbox-tertiary">
+            {t('{{direct}} playable in Chatbox, {{webpage}} webpage results', {
+              direct: directCount,
+              webpage: results.length - directCount,
+            })}
+          </Text>
+          {results.map((result, index) => (
+            <Box key={`${result.url}-${index}`}>
+              <Group gap={6} wrap="nowrap">
+                <Text size="xs" c="chatbox-secondary" lineClamp={1} className="min-w-0 flex-1">
+                  {result.title}
+                </Text>
+                <Text size="10px" c={result.playbackMode === 'webpage' ? 'orange' : 'green'} className="shrink-0">
+                  {result.playbackMode === 'webpage' ? t('Open webpage') : t('Play in Chatbox')}
+                </Text>
+              </Group>
+              <Code block className="break-all text-xs">
+                {result.url}
+              </Code>
+            </Box>
+          ))}
+        </Stack>
+      ) : part.state === 'result' ? (
+        <Text size="sm" c="chatbox-tertiary">
+          {t('No videos found')}
+        </Text>
+      ) : null}
+    </Stack>
+  )
+}
+
+const VideoSearchUI: FC<{ part: MessageToolCallPart }> = ({ part }) => {
+  const { t } = useTranslation()
+  const count = extractVideoSearchResults(part.result).length
+  const [expanded, setExpanded] = useAutoExpandOnSignal(part.state === 'result' && count > 0)
+  const summary = count > 0 ? t('{{count}} videos', { count }) : undefined
+  return (
+    <Stack gap={4} mb={4}>
+      <ToolCallPill part={part} summary={summary} onClick={() => setExpanded((value) => !value)} expanded={expanded} />
+      <Collapse in={expanded}>
+        <Box ml={4} pl="sm" style={{ borderLeft: '2px solid var(--chatbox-tint-success)' }}>
+          <VideoSearchDetails part={part} />
+        </Box>
+      </Collapse>
     </Stack>
   )
 }
@@ -1242,6 +1368,12 @@ export const ToolCallPartUI: FC<{ part: MessageToolCallPart } & ToolCallActionCo
   if (part.toolName === 'web_search') {
     return <WebSearchGroupUI parts={[part]} />
   }
+  if (part.toolName === 'image_search') {
+    return <ImageSearchUI part={part} />
+  }
+  if (part.toolName === 'video_search') {
+    return <VideoSearchUI part={part} />
+  }
   if (part.toolName === 'parse_link') {
     return <ParseLinkUI part={part} />
   }
@@ -1406,6 +1538,12 @@ const TimelineToolCallDetail: FC<{ part: MessageToolCallPart }> = ({ part }) => 
   }
   if (part.toolName === 'web_search') {
     return <WebSearchDetails part={part} />
+  }
+  if (part.toolName === 'image_search') {
+    return <ImageSearchDetails part={part} />
+  }
+  if (part.toolName === 'video_search') {
+    return <VideoSearchDetails part={part} />
   }
   if (part.toolName === 'parse_link') {
     return <ParseLinkDetails part={part} />

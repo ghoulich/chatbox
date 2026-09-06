@@ -2,6 +2,7 @@ import { Box, Divider, Flex, Stack, Switch, Text, Title } from '@mantine/core'
 import { createFileRoute } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 import { CopilotMemoriesSection, MemoriesSection, SoulEditor } from '@/components/settings/agent-persona'
+import platform from '@/platform'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useUIStore } from '@/stores/uiStore'
 
@@ -23,20 +24,22 @@ export function RouteComponent() {
         {t('Configure default agent behavior, its Soul, and its memories.')}
       </Text>
 
-      <Flex mt="md" justify="space-between" align="center" gap="md">
-        <Stack gap={0}>
-          <Text size="sm" fw={500}>
-            {t('Smart Switching')}
-          </Text>
-          <Text size="xs" c="dimmed">
-            {t('Suggest Work Mode on the first message.')}
-          </Text>
-        </Stack>
-        <Switch
-          checked={smartSwitchingDefault}
-          onChange={(event) => setAgentModeSmartSwitchingDefault(event.currentTarget.checked)}
-        />
-      </Flex>
+      {platform.isDesktopLike && (
+        <Flex mt="md" justify="space-between" align="center" gap="md">
+          <Stack gap={0}>
+            <Text size="sm" fw={500}>
+              {t('Smart Switching')}
+            </Text>
+            <Text size="xs" c="dimmed">
+              {t('Suggest Work Mode on the first message.')}
+            </Text>
+          </Stack>
+          <Switch
+            checked={smartSwitchingDefault}
+            onChange={(event) => setAgentModeSmartSwitchingDefault(event.currentTarget.checked)}
+          />
+        </Flex>
+      )}
 
       <Flex mt="md" justify="space-between" align="center" gap="md">
         <Stack gap={0}>
@@ -57,9 +60,13 @@ export function RouteComponent() {
 
       <Title order={6}>Soul</Title>
       <Text size="sm" c="dimmed" mt="xs">
-        {t(
-          'Soul defines who your agent is — persona, tone, and boundaries. It replaces per-session system prompts in agent mode and is loaded when an agent session starts.'
-        )}
+        {platform.type === 'mobile'
+          ? t(
+              'Soul defines who your agent is — persona, tone, and boundaries. It is loaded in new mobile Chat Mode sessions.'
+            )
+          : t(
+              'Soul defines who your agent is — persona, tone, and boundaries. It replaces per-session system prompts in agent mode and is loaded when an agent session starts.'
+            )}
       </Text>
       <Box mt="md">
         <SoulEditor />
