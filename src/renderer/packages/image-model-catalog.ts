@@ -5,6 +5,8 @@ import { getModelManifest, type RemoteModelInfo } from '@/packages/remote'
 import platform from '@/platform'
 import type { PlatformType } from '@/platform/interfaces'
 import { settingsStore } from '@/stores/settingsStore'
+import { loadComfyUICheckpoints } from './comfyui/client'
+import { COMFYUI_IMAGE_PROVIDER_ID, COMFYUI_WORKFLOW_MODEL_ID } from './comfyui/constants'
 
 const log = getLogger('image-model-catalog')
 
@@ -154,5 +156,40 @@ export async function getAvailableImageModels(
     )
   }
 
+  if (settings.comfyui.enabled && settings.comfyui.endpoint.trim() && settings.comfyui.workflowJson.trim()) {
+    let checkpoints: string[] = []
+    try {
+      checkpoints = await loadComfyUICheckpoints(settings.comfyui)
+    } catch (error) {
+      log.error('Failed to load ComfyUI checkpoints:', error)
+    }
+    catalog.push(
+      ...(checkpoints.length > 0
+        ? checkpoints.map((modelId) => ({ provider: COMFYUI_IMAGE_PROVIDER_ID, modelId, nickname: modelId }))
+        : [
+            {
+              provider: COMFYUI_IMAGE_PROVIDER_ID,
+              modelId: COMFYUI_WORKFLOW_MODEL_ID,
+              nickname: settings.comfyui.workflowName.trim() || 'ComfyUI Workflow',
+            },
+          ])
+    )
+  }
+
   return catalog
+}
+
+export function resolveDefaultImageModel(
+  models: AvailableImageModel[],
+  settings: Pick<Settings, 'defaultImageModel'>,
+  lastUsed?: { provider: string; modelId: string }
+): AvailableImageModel | undefined {
+  const matches = (selection?: { provider: string; model?: string; modelId?: string }) =>
+    selection
+      ? models.find(
+          (candidate) =>
+            candidate.provider === selection.provider && candidate.modelId === (selection.model ?? selection.modelId)
+        )
+      : undefined
+  return matches(settings.defaultImageModel) ?? matches(lastUsed) ?? models[0]
 }

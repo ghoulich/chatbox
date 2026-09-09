@@ -1,12 +1,17 @@
 import { type ImageGeneration, ModelProviderEnum } from '@shared/types'
 import { requestAppActionApproval } from '@/packages/app-action-approval'
-import { type AvailableImageModel, getAvailableImageModels } from '@/packages/image-model-catalog'
+import {
+  type AvailableImageModel,
+  getAvailableImageModels,
+  resolveDefaultImageModel,
+} from '@/packages/image-model-catalog'
 import platform from '@/platform'
 import storage from '@/storage'
 import { rendererApplication } from '@/app/renderer-application'
 import { startImageGeneration } from '@/stores/imageGenerationActions'
 import { imageGenerationStore } from '@/stores/imageGenerationStore'
 import { settingsStore } from '@/stores/settingsStore'
+import { lastUsedModelStore } from '@/stores/lastUsedModelStore'
 import { getAcceptedImageBackgroundTaskResult } from './background-task-result'
 import { getComputePointsRemainingRatio } from './compute-points'
 import { queueImageTaskCompletion, queueImageTaskCompletionError } from './image-task-follow-up'
@@ -359,7 +364,9 @@ async function generateImage(context: ChatboxCliCommandContext): Promise<Record<
   if (!provider || !modelId) {
     const models = await ensureAvailableModels()
     const scoped = provider ? models.filter((model) => model.provider === provider) : models
-    const selected = modelId ? scoped.find((model) => model.modelId === modelId) : scoped[0]
+    const selected = modelId
+      ? scoped.find((model) => model.modelId === modelId)
+      : resolveDefaultImageModel(scoped, settings, lastUsedModelStore.getState().picture)
     provider ??= selected?.provider
     modelId ??= selected?.modelId
   }
@@ -552,9 +559,10 @@ export const imageCommands: ChatboxCliCommandDefinition[] = [
     usage: 'chatbox image models',
     async execute() {
       const models = await getAvailableImageModels()
+      const settings = settingsStore.getState()
       return {
         models,
-        defaultModel: models[0] ?? null,
+        defaultModel: resolveDefaultImageModel(models, settings, lastUsedModelStore.getState().picture) ?? null,
       }
     },
   },

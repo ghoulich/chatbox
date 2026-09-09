@@ -12,7 +12,7 @@
 ## ghoulich Android 二开版
 
 本 fork 以官方 Chatbox `v1.23.1` 为基线，当前二开版本为
-`1.23.1.492`。在保留上游桌面端和 Web 代码的同时，Android 端增加：
+`1.23.1.495`。在保留上游桌面端和 Web 代码的同时，Android 端增加：
 
 - 通过 Android SAF 只读扫描 Skills，在对话中调用 `load_skill`，并在
   Android 对话模式中启用 Skills 与远程 HTTP/SSE MCP；
@@ -23,6 +23,9 @@
 - 网页读取可选择 Chatbox 原生 `parse_link` 或自托管 Firecrawl；Firecrawl
   支持可选 Bearer Token、受限超时、Android 原生 HTTP 传输，并提供默认关闭
   的原生读取回退开关；
+- 原生接入自托管 ComfyUI 生图：支持端点及可选 Basic Auth 用户名/密码、API 工作流导入、
+  标准节点自动识别、显式参数映射、检查点模型发现、轮询/取消，以及把结果下载
+  到本地图像历史；可设置默认生图模型，同时保留原有云端生图提供方；
 - 新会话 Soul/人格注入，以及不会覆盖用户手动命名的搭档会话自动标题；
 - DNS、Ping、TCP、HTTP/TLS、Wi-Fi/LAN、限流测速、SSH 和只读 SNMP 等
   Android 本地网络诊断，敏感凭据不会出现在模型可见的工具结果中；
@@ -50,6 +53,21 @@
 填写 Bearer Token，选择超时时间后点击“**检查连接**”发起一次真实抓取测试。
 只有在允许 Firecrawl 失败后由 Android 设备直接读取目标网页时，才启用
 “**失败时回退到原生读取**”；保持关闭可确保网页读取流量不回退到手机端。
+
+### ComfyUI 配置
+
+打开“**设置 → ComfyUI 图像生成**”，填写 ComfyUI 或带身份认证反向代理的基础
+地址；仅在服务需要时填写 Basic Auth 用户名和密码。在 ComfyUI 中使用 **Save (API Format)**
+导出工作流并导入 JSON。标准的检查点、提示词、采样器和潜空间图像节点会自动
+识别；自定义工作流可用“`节点ID.输入名`”显式映射。点击“**检查 ComfyUI 连接**”
+验证后，还可到“**设置 → 默认模型 → 默认图像生成模型**”选择默认检查点。
+
+工作流中的宽、高为有效数值或节点连线时优先使用；设置里的默认宽、高只补齐
+缺失、为零或无效的工作流输入。选择 ComfyUI 后，生图页面不再显示容易产生
+歧义的通用宽高比选择器，最终尺寸由工作流及上述默认值共同决定。
+
+Android 端到端测试使用的最小 SD 1.5 API 工作流见
+[`custom/android/comfyui-workflows/sd15-basic-api.json`](../custom/android/comfyui-workflows/sd15-basic-api.json)。
 
 ### 下载电脑端
 

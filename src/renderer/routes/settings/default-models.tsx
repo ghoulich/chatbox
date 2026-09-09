@@ -8,6 +8,7 @@ import { forwardRef, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ScalableIcon } from '@/components/common/ScalableIcon'
 import ModelSelector from '@/components/ModelSelector'
+import { useImageModelGroups } from '@/hooks/useImageModelGroups'
 import { enrichModelsFromRegistry, useModelRegistryVersion } from '@/packages/model-registry'
 import { useSettingsStore } from '@/stores/settingsStore'
 import {
@@ -24,6 +25,18 @@ export function RouteComponent() {
   const { t } = useTranslation()
   const { setSettings, ...settings } = useSettingsStore((state) => state)
   const chatboxAIAutoText = settings.licenseKey ? t('Auto (Use Chatbox AI)')! : t('None')!
+  const imageModelGroups = useImageModelGroups()
+  const imageModelOptions = useMemo(
+    () =>
+      imageModelGroups.map((group) => ({
+        group: group.label,
+        items: group.models.map((model) => ({
+          value: JSON.stringify({ provider: group.providerId, model: model.modelId }),
+          label: model.displayName,
+        })),
+      })),
+    [imageModelGroups]
+  )
 
   return (
     <Stack p="md" gap="xl">
@@ -67,6 +80,28 @@ export function RouteComponent() {
 
         <Text c="chatbox-tertiary" size="xs">
           {t('Chatbox will use this model as the default for new chats.')}
+        </Text>
+      </Stack>
+
+      <Stack gap="xs">
+        <Text fw={600}>{t('Default Image Generation Model')}</Text>
+        <Select
+          searchable
+          clearable
+          placeholder={t('Auto (Use Last Used)')!}
+          data={imageModelOptions}
+          value={settings.defaultImageModel ? JSON.stringify(settings.defaultImageModel) : null}
+          onChange={(value) => {
+            if (!value) {
+              setSettings({ defaultImageModel: undefined })
+              return
+            }
+            const selection = JSON.parse(value) as { provider: string; model: string }
+            setSettings({ defaultImageModel: selection })
+          }}
+        />
+        <Text c="chatbox-tertiary" size="xs">
+          {t('Used by Image Creator and agent image generation when no model is selected explicitly.')}
         </Text>
       </Stack>
 

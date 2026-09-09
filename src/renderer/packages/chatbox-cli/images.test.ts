@@ -30,6 +30,17 @@ vi.mock('@/app/renderer-application', () => ({
 }))
 vi.mock('@/packages/image-model-catalog', () => ({
   getAvailableImageModels: getAvailableImageModelsMock,
+  resolveDefaultImageModel: (
+    models: Array<{ provider: string; modelId: string }>,
+    settings: { defaultImageModel?: { provider: string; model: string } },
+    lastUsed?: { provider: string; modelId: string }
+  ) =>
+    models.find(
+      (model) =>
+        model.provider === settings.defaultImageModel?.provider && model.modelId === settings.defaultImageModel?.model
+    ) ??
+    models.find((model) => model.provider === lastUsed?.provider && model.modelId === lastUsed.modelId) ??
+    models[0],
 }))
 vi.mock('@/platform', () => ({
   default: {
@@ -40,6 +51,9 @@ vi.mock('@/platform', () => ({
   },
 }))
 vi.mock('@/stores/imageGenerationActions', () => ({ startImageGeneration: startImageGenerationMock }))
+vi.mock('@/stores/lastUsedModelStore', () => ({
+  lastUsedModelStore: { getState: () => ({ picture: undefined }) },
+}))
 vi.mock('@/stores/imageGenerationStore', () => ({
   imageGenerationStore: { getState: () => ({ currentGeneratingId: null }) },
 }))

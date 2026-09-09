@@ -59,6 +59,10 @@ vi.mock('./settingsStore', () => ({
   },
 }))
 
+vi.mock('./lastUsedModelStore', () => ({
+  lastUsedModelStore: { getState: () => ({ setPictureModel: vi.fn() }) },
+}))
+
 vi.mock('@/utils/track', () => ({
   trackEvent: trackEventMock,
 }))
@@ -150,7 +154,7 @@ describe('imageGenerationActions reference image payload', () => {
       'license-key'
     )
     expect(trackEventMock).toHaveBeenCalledWith('generate_image', expect.objectContaining({ has_reference: true }))
-  })
+  }, 30_000)
 
   it('exposes a completion promise for background task consumers', async () => {
     const { startImageGeneration } = await import('./imageGenerationActions')

@@ -36,6 +36,7 @@ import { useIsSmallScreen } from '@/hooks/useScreenChange'
 import useVersion from '@/hooks/useVersion'
 import { getLogger } from '@/lib/utils'
 import { resumeImageGenerationWithFollowUp } from '@/packages/chatbox-cli/image-task-follow-up'
+import { COMFYUI_IMAGE_PROVIDER_ID } from '@/packages/comfyui/constants'
 import storage from '@/storage'
 import { StorageKeyGenerator } from '@/storage/StoreStorage'
 import { useAuthInfoStore } from '@/stores/authInfoStore'
@@ -50,6 +51,7 @@ import {
   useImageGenerationRecord,
 } from '@/stores/imageGenerationStore'
 import { queryClient } from '@/stores/queryClient'
+import { lastUsedModelStore } from '@/stores/lastUsedModelStore'
 import { settingsStore, useSettingsStore } from '@/stores/settingsStore'
 import * as toastActions from '@/stores/toastActions'
 import { getHomeWelcomeCardMode } from '@/utils/homeWelcomeCard'
@@ -70,6 +72,9 @@ import { ReferenceImagesPreview } from './-components/ReferenceImagesPreview'
 import { LoadingShimmer } from './-components/Shimmer'
 
 const log = getLogger('image-creator')
+function getRatioOptions(provider: string, model: string): string[] {
+  return provider === COMFYUI_IMAGE_PROVIDER_ID ? ['auto'] : getRatioOptionsForModel(model)
+}
 
 export const Route = createFileRoute('/image-creator/')({
   component: ImageCreatorPage,
@@ -85,6 +90,7 @@ interface InputToolbarProps {
   modelDisplayName: string
   selectedRatio: string
   ratioOptions: string[]
+  showRatioSelect: boolean
   onModelDrawerOpen: () => void
   onRatioDrawerOpen: () => void
   onRatioSelect: (ratio: string) => void
@@ -99,6 +105,7 @@ function InputToolbar({
   modelDisplayName,
   selectedRatio,
   ratioOptions,
+  showRatioSelect,
   onModelDrawerOpen,
   onRatioDrawerOpen,
   onRatioSelect,
@@ -136,40 +143,41 @@ function InputToolbar({
           </ImageModelSelect>
         )}
 
-        {/* Ratio Select */}
-        {isSmallScreen ? (
-          <UnstyledButton
-            onClick={onRatioDrawerOpen}
-            className="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-[var(--chatbox-background-tertiary)] transition-colors"
-          >
-            <IconAspectRatio size={16} className="text-[var(--chatbox-tint-secondary)]" />
-            <Text size="sm" className="text-[var(--chatbox-tint-secondary)]">
-              {selectedRatio}
-            </Text>
-            <IconChevronRight size={14} className="text-[var(--chatbox-tint-tertiary)] rotate-90" />
-          </UnstyledButton>
-        ) : (
-          <Menu position="top" withinPortal shadow="md" radius="lg">
-            <Menu.Target>
-              <UnstyledButton className="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-[var(--chatbox-background-tertiary)] transition-colors">
-                <IconAspectRatio size={16} className="text-[var(--chatbox-tint-secondary)]" />
-                <Text size="sm" className="text-[var(--chatbox-tint-secondary)]">
-                  {selectedRatio}
-                </Text>
-                <IconChevronRight size={14} className="text-[var(--chatbox-tint-tertiary)] rotate-90" />
-              </UnstyledButton>
-            </Menu.Target>
-            <Menu.Dropdown className="!rounded-lg" style={{ minWidth: 100 }}>
-              {ratioOptions.map((ratio) => (
-                <Menu.Item key={ratio} onClick={() => onRatioSelect(ratio)} className="!rounded-lg">
-                  <Text size="sm" fw={500} ta="center">
-                    {ratio}
+        {/* ComfyUI keeps the workflow dimensions, so its ratio control is intentionally hidden. */}
+        {showRatioSelect &&
+          (isSmallScreen ? (
+            <UnstyledButton
+              onClick={onRatioDrawerOpen}
+              className="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-[var(--chatbox-background-tertiary)] transition-colors"
+            >
+              <IconAspectRatio size={16} className="text-[var(--chatbox-tint-secondary)]" />
+              <Text size="sm" className="text-[var(--chatbox-tint-secondary)]">
+                {t('Aspect Ratio')}: {selectedRatio === 'auto' ? t('Auto') : selectedRatio}
+              </Text>
+              <IconChevronRight size={14} className="text-[var(--chatbox-tint-tertiary)] rotate-90" />
+            </UnstyledButton>
+          ) : (
+            <Menu position="top" withinPortal shadow="md" radius="lg">
+              <Menu.Target>
+                <UnstyledButton className="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-[var(--chatbox-background-tertiary)] transition-colors">
+                  <IconAspectRatio size={16} className="text-[var(--chatbox-tint-secondary)]" />
+                  <Text size="sm" className="text-[var(--chatbox-tint-secondary)]">
+                    {t('Aspect Ratio')}: {selectedRatio === 'auto' ? t('Auto') : selectedRatio}
                   </Text>
-                </Menu.Item>
-              ))}
-            </Menu.Dropdown>
-          </Menu>
-        )}
+                  <IconChevronRight size={14} className="text-[var(--chatbox-tint-tertiary)] rotate-90" />
+                </UnstyledButton>
+              </Menu.Target>
+              <Menu.Dropdown className="!rounded-lg" style={{ minWidth: 100 }}>
+                {ratioOptions.map((ratio) => (
+                  <Menu.Item key={ratio} onClick={() => onRatioSelect(ratio)} className="!rounded-lg">
+                    <Text size="sm" fw={500} ta="center">
+                      {ratio === 'auto' ? t('Auto') : ratio}
+                    </Text>
+                  </Menu.Item>
+                ))}
+              </Menu.Dropdown>
+            </Menu>
+          ))}
 
         {/* Reference Image Button */}
         <UnstyledButton
@@ -216,6 +224,7 @@ function ImageCreatorPage() {
   const isSmallScreen = useIsSmallScreen()
   const { providers } = useProviders()
   const imageModelGroups = useImageModelGroups()
+  const defaultImageModel = useSettingsStore((s) => s.defaultImageModel)
   const hasLicense = useSettingsStore((s) => Boolean(s.licenseKey))
   const hasExpiredLicense = useSettingsStore((s) => s.hasExpiredLicense)
   const isLoggedIn = useAuthInfoStore((s) => Boolean(s.accessToken && s.refreshToken))
@@ -241,14 +250,22 @@ function ImageCreatorPage() {
   const tempUploadKeysRef = useRef<Set<string>>(new Set())
   const [showHistory, setShowHistory] = useState(true)
   const [showMobileHistory, setShowMobileHistory] = useState(false)
-  const [selectedProvider, setSelectedProvider] = useState<string>(ModelProviderEnum.ChatboxAI)
-  const [selectedModel, setSelectedModel] = useState<string>('')
+  const initialImageModel =
+    defaultImageModel ??
+    (() => {
+      const picture = lastUsedModelStore.getState().picture
+      return picture ? { provider: picture.provider, model: picture.modelId } : undefined
+    })()
+  const [selectedProvider, setSelectedProvider] = useState<string>(
+    initialImageModel?.provider ?? ModelProviderEnum.ChatboxAI
+  )
+  const [selectedModel, setSelectedModel] = useState<string>(initialImageModel?.model ?? '')
   const [selectedRatio, setSelectedRatio] = useState<string>('auto')
   const [showModelDrawer, setShowModelDrawer] = useState(false)
   const [showRatioDrawer, setShowRatioDrawer] = useState(false)
 
   // Get ratio options based on selected model
-  const ratioOptions = getRatioOptionsForModel(selectedModel)
+  const ratioOptions = getRatioOptions(selectedProvider, selectedModel)
 
   const currentGeneratingId = useCurrentGeneratingId()
   const currentRecordId = useCurrentRecordId()
@@ -286,7 +303,11 @@ function ImageCreatorPage() {
   }, [])
 
   useEffect(() => {
-    const nextSelection = resolveImageModelSelection(imageModelGroups, selectedProvider, selectedModel)
+    const lastUsed = lastUsedModelStore.getState().picture
+    const nextSelection = resolveImageModelSelection(imageModelGroups, selectedProvider, selectedModel, [
+      ...(defaultImageModel ? [defaultImageModel] : []),
+      ...(lastUsed ? [{ provider: lastUsed.provider, model: lastUsed.modelId }] : []),
+    ])
     if (!nextSelection) {
       setSelectedProvider('')
       setSelectedModel('')
@@ -297,9 +318,9 @@ function ImageCreatorPage() {
 
     setSelectedProvider(nextSelection.provider)
     setSelectedModel(nextSelection.model)
-    const ratioOptionsForFirstModel = getRatioOptionsForModel(nextSelection.model)
+    const ratioOptionsForFirstModel = getRatioOptions(nextSelection.provider, nextSelection.model)
     setSelectedRatio((prev) => (ratioOptionsForFirstModel.includes(prev) ? prev : 'auto'))
-  }, [imageModelGroups, selectedProvider, selectedModel])
+  }, [imageModelGroups, selectedProvider, selectedModel, defaultImageModel])
 
   // Cleanup orphan temp uploads if user leaves the page mid-way.
   useEffect(() => {
@@ -311,10 +332,10 @@ function ImageCreatorPage() {
   const handleModelSelect = useCallback((provider: string, model: string) => {
     setSelectedProvider(provider)
     setSelectedModel(model)
-    // lastUsedModelStore.getState().setPictureModel(provider, model)
+    lastUsedModelStore.getState().setPictureModel(provider, model)
 
     // Reset ratio to 'auto' if current ratio is not supported by the new model
-    const newRatioOptions = getRatioOptionsForModel(model)
+    const newRatioOptions = getRatioOptions(provider, model)
     setSelectedRatio((prev) => (newRatioOptions.includes(prev) ? prev : 'auto'))
   }, [])
 
@@ -372,6 +393,10 @@ function ImageCreatorPage() {
 
     if (selectedProvider === ModelProviderEnum.ChatboxAI && !settingsStore.getState().licenseKey) {
       toastActions.add(t('Please log in to Chatbox AI first'))
+      return
+    }
+    if (selectedProvider === COMFYUI_IMAGE_PROVIDER_ID && referenceImages.length > 0) {
+      toastActions.add(t('The current ComfyUI integration supports text-to-image workflows only.'))
       return
     }
 
@@ -691,6 +716,7 @@ function ImageCreatorPage() {
                     modelDisplayName={modelDisplayName}
                     selectedRatio={selectedRatio}
                     ratioOptions={ratioOptions}
+                    showRatioSelect={selectedProvider !== COMFYUI_IMAGE_PROVIDER_ID}
                     onModelDrawerOpen={() => setShowModelDrawer(true)}
                     onRatioDrawerOpen={() => setShowRatioDrawer(true)}
                     onRatioSelect={setSelectedRatio}

@@ -10,6 +10,19 @@ function credentialSettings(): Settings {
     lastSelectedLicenseByUser: { user: 'selected-license' },
     memorizedManualLicenseKey: 'memorized-license',
     vibedropPublishKey: { email: 'user@example.com', key: 'publish-key' },
+    comfyui: {
+      enabled: true,
+      endpoint: 'https://comfy.example.com',
+      username: 'comfy-user',
+      password: 'comfy-password',
+      workflowName: 'SDXL',
+      workflowJson: '{}',
+      inputMapping: {},
+      defaultWidth: 1024,
+      defaultHeight: 1024,
+      timeoutSeconds: 600,
+      pollIntervalMs: 1000,
+    },
     providers: {
       provider: {
         apiKey: 'api-key',
@@ -80,6 +93,9 @@ describe('cleanSettingsForBackup', () => {
     expect(cleaned).not.toHaveProperty('lastSelectedLicenseByUser')
     expect(cleaned).not.toHaveProperty('memorizedManualLicenseKey')
     expect(cleaned).not.toHaveProperty('vibedropPublishKey')
+    expect(cleaned.comfyui).toMatchObject({ endpoint: 'https://comfy.example.com', username: 'comfy-user' })
+    expect(cleaned.comfyui).not.toHaveProperty('password')
+    expect(cleaned.comfyui).not.toHaveProperty('bearerToken')
     expect(cleaned.providers).toEqual({ provider: { apiHost: 'https://example.com' } })
     expect(cleaned.customProviders).toEqual([
       {
@@ -131,6 +147,7 @@ describe('cleanSettingsForBackup', () => {
       licenseKey: 'license-key',
       memorizedManualLicenseKey: 'memorized-license',
       vibedropPublishKey: { key: 'publish-key' },
+      comfyui: { username: 'comfy-user', password: 'comfy-password' },
       providers: { provider: { apiKey: 'api-key', oauth: { accessToken: 'access-token' } } },
       customProviders: [{ defaultSettings: { apiKey: 'default-api-key' } }],
       extension: {

@@ -8,6 +8,8 @@ import {
   manualImageModelToOption,
   mergeImageModels,
 } from '@/packages/image-model-catalog'
+import { loadComfyUICheckpoints } from '@/packages/comfyui/client'
+import { COMFYUI_IMAGE_PROVIDER_ID, COMFYUI_WORKFLOW_MODEL_ID } from '@/packages/comfyui/constants'
 import { useLanguage, useSettingsStore } from '@/stores/settingsStore'
 import useChatboxAIModels from './useChatboxAIModels'
 import { useProviders } from './useProviders'
@@ -17,6 +19,15 @@ export interface ImageModelGroup {
   providerId: string
   isCustom?: boolean
   models: ImageModelOption[]
+}
+
+function credentialCacheKey(value: string | undefined): string {
+  let hash = 2166136261
+  for (const character of value ?? '') {
+    hash ^= character.codePointAt(0) ?? 0
+    hash = Math.imul(hash, 16777619)
+  }
+  return `${value?.length ?? 0}:${(hash >>> 0).toString(36)}`
 }
 
 export function useProviderImageModels(provider: ModelProviderEnum, enabled: boolean): ImageModelOption[] {
@@ -46,6 +57,7 @@ export function useImageModelGroups(): ImageModelGroup[] {
   const { providers } = useProviders()
   const { chatboxAIImageModels } = useChatboxAIModels()
   const providerSettingsMap = useSettingsStore((state) => state.providers)
+  const comfyui = useSettingsStore((state) => state.comfyui)
 
   const chatboxProvider = providers.find((p) => p.id === ModelProviderEnum.ChatboxAI)
   const openAIProvider = providers.find((p) => p.id === ModelProviderEnum.OpenAI)
@@ -57,6 +69,13 @@ export function useImageModelGroups(): ImageModelGroup[] {
     ModelProviderEnum.Gemini,
     !!geminiProvider || customGeminiProviders.length > 0
   )
+  const { data: comfyUICheckpoints = [] } = useQuery({
+    queryKey: ['comfyui-checkpoints', comfyui.endpoint, comfyui.username || '', credentialCacheKey(comfyui.password)],
+    enabled: comfyui.enabled && !!comfyui.endpoint.trim(),
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+    queryFn: () => loadComfyUICheckpoints(comfyui),
+  })
 
   return useMemo(() => {
     const groups: ImageModelGroup[] = []
@@ -115,6 +134,23 @@ export function useImageModelGroups(): ImageModelGroup[] {
       }
     }
 
+    if (comfyui.enabled && comfyui.endpoint.trim() && comfyui.workflowJson.trim()) {
+      groups.push({
+        label: 'ComfyUI',
+        providerId: COMFYUI_IMAGE_PROVIDER_ID,
+        isCustom: true,
+        models:
+          comfyUICheckpoints.length > 0
+            ? comfyUICheckpoints.map((modelId) => ({ modelId, displayName: modelId }))
+            : [
+                {
+                  modelId: COMFYUI_WORKFLOW_MODEL_ID,
+                  displayName: comfyui.workflowName.trim() || 'ComfyUI Workflow',
+                },
+              ],
+      })
+    }
+
     return groups
   }, [
     chatboxProvider,
@@ -125,5 +161,7 @@ export function useImageModelGroups(): ImageModelGroup[] {
     chatboxAIImageModels,
     openAIImageModels,
     geminiImageModels,
+    comfyui,
+    comfyUICheckpoints,
   ])
 }

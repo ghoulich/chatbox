@@ -8,12 +8,12 @@ export interface ImageModelSelection {
 export function resolveImageModelSelection(
   modelGroups: ImageModelGroup[],
   selectedProvider: string,
-  selectedModel: string
+  selectedModel: string,
+  fallbacks: ImageModelSelection[] = []
 ): ImageModelSelection | null {
-  const selectedGroup = modelGroups.find((group) => group.providerId === selectedProvider)
-  const selectedOption = selectedGroup?.models.find((model) => model.modelId === selectedModel)
-  if (selectedOption) {
-    return { provider: selectedProvider, model: selectedModel }
+  for (const selection of [{ provider: selectedProvider, model: selectedModel }, ...fallbacks]) {
+    const group = modelGroups.find((candidate) => candidate.providerId === selection.provider)
+    if (group?.models.some((model) => model.modelId === selection.model)) return selection
   }
 
   const firstGroup = modelGroups.find((group) => group.models.length > 0)

@@ -240,7 +240,7 @@ export function MobileRatioDrawer({ open, onOpenChange, options, selectedRatio, 
                 `}
               >
                 <Text size="sm" fw={selectedRatio === ratio ? 600 : 400} ta="center">
-                  {ratio}
+                  {ratio === 'auto' ? t('Auto') : ratio}
                 </Text>
               </UnstyledButton>
             ))}

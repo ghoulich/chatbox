@@ -28,4 +28,14 @@ describe('resolveImageModelSelection', () => {
       model: 'gpt-image-2',
     })
   })
+
+  it('uses a valid preferred fallback before catalog order', () => {
+    const withComfy = [
+      ...groups,
+      { label: 'ComfyUI', providerId: 'comfyui', models: [{ modelId: 'flux', displayName: 'Flux' }] },
+    ]
+    expect(
+      resolveImageModelSelection(withComfy, 'missing', 'missing', [{ provider: 'comfyui', model: 'flux' }])
+    ).toEqual({ provider: 'comfyui', model: 'flux' })
+  })
 })

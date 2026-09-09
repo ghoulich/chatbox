@@ -14,6 +14,7 @@ import {
   IconKeyboard,
   IconMessages,
   IconNetwork,
+  IconPhoto,
   IconRobotFace,
   IconSparkles,
   IconWand,
@@ -46,6 +47,11 @@ const ITEMS = [
     key: 'default-models',
     label: 'Default Models',
     icon: <IconBox className="w-full h-full" />,
+  },
+  {
+    key: 'comfyui',
+    label: 'ComfyUI Image Generation',
+    icon: <IconPhoto className="w-full h-full" />,
   },
   {
     key: 'web-search',
@@ -177,7 +183,7 @@ export function SettingsRoot() {
           maw={isSmallScreen ? undefined : 256}
           className={clsx(
             'border-solid border-0 border-r overflow-auto border-chatbox-border-primary',
-            isSmallScreen ? 'w-full border-r-0' : 'flex-[1_0_auto]',
+            isSmallScreen ? 'w-full border-r-0' : 'flex-[1_0_auto]'
           )}
         >
           {ITEMS.map((item) => (
@@ -210,7 +216,7 @@ export function SettingsRoot() {
                 bg={item.key === key ? 'var(--chatbox-background-brand-secondary)' : 'transparent'}
                 className={clsx(
                   ' cursor-pointer select-none rounded-lg',
-                  item.key === key ? '' : 'hover:!bg-chatbox-background-gray-secondary',
+                  item.key === key ? '' : 'hover:!bg-chatbox-background-gray-secondary'
                 )}
               >
                 <Box component="span" flex="0 0 auto" w={20} h={20} mr="xs">

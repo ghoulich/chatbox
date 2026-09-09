@@ -478,6 +478,33 @@ const DefaultModelSelectionSchema = z
   .optional()
   .catch(undefined)
 
+const ComfyUIInputMappingSchema = z.object({
+  positivePrompt: z.string().optional().catch(undefined),
+  negativePrompt: z.string().optional().catch(undefined),
+  checkpoint: z.string().optional().catch(undefined),
+  width: z.string().optional().catch(undefined),
+  height: z.string().optional().catch(undefined),
+  seed: z.string().optional().catch(undefined),
+  steps: z.string().optional().catch(undefined),
+  batchSize: z.string().optional().catch(undefined),
+})
+
+const ComfyUISettingsSchema = z.object({
+  enabled: z.boolean().default(false),
+  endpoint: z.string().default(''),
+  username: z.string().optional().catch(undefined),
+  password: z.string().optional().catch(undefined),
+  workflowName: z.string().default('ComfyUI Workflow'),
+  workflowJson: z.string().default(''),
+  inputMapping: ComfyUIInputMappingSchema.default({}),
+  outputNodeId: z.string().optional().catch(undefined),
+  defaultNegativePrompt: z.string().optional().catch(undefined),
+  defaultWidth: z.number().int().min(64).max(8192).default(1024),
+  defaultHeight: z.number().int().min(64).max(8192).default(1024),
+  timeoutSeconds: z.number().int().min(30).max(1800).default(600),
+  pollIntervalMs: z.number().int().min(250).max(10000).default(1000),
+})
+
 export const SettingsSchema = GlobalSessionSettingsSchema.extend({
   providers: z.record(z.string(), ProviderSettingsSchema).optional().catch(undefined),
   customProviders: z.array(CustomProviderBaseInfoSchema).optional().catch(undefined),
@@ -523,7 +550,21 @@ export const SettingsSchema = GlobalSessionSettingsSchema.extend({
   visionAnalysisPrompt: z.string().optional().catch(undefined),
   defaultEmbeddingModel: DefaultModelSelectionSchema,
   defaultRerankModel: DefaultModelSelectionSchema,
+  defaultImageModel: DefaultModelSelectionSchema,
   sessionAttachmentProcessingMode: z.enum(['auto', 'inline', 'retrieval']).default('auto'),
+
+  // Self-hosted image generation. The workflow must be ComfyUI's API format.
+  comfyui: ComfyUISettingsSchema.default({
+    enabled: false,
+    endpoint: '',
+    workflowName: 'ComfyUI Workflow',
+    workflowJson: '',
+    inputMapping: {},
+    defaultWidth: 1024,
+    defaultHeight: 1024,
+    timeoutSeconds: 600,
+    pollIntervalMs: 1000,
+  }),
 
   // chatboxai
   licenseKey: z.string().optional(),

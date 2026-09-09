@@ -80,6 +80,29 @@ describe('SettingsSchema RAG default models', () => {
   })
 })
 
+describe('SettingsSchema ComfyUI Basic authentication', () => {
+  test('preserves username and password settings', () => {
+    const parsed = SettingsSchema.parse({
+      ...defaultSettings(),
+      comfyui: {
+        ...defaultSettings().comfyui,
+        username: 'artist',
+        password: 'secret',
+      },
+    })
+
+    expect(parsed.comfyui.username).toBe('artist')
+    expect(parsed.comfyui.password).toBe('secret')
+  })
+
+  test('drops the legacy ComfyUI Bearer token field', () => {
+    const legacy = defaultSettings() as unknown as Record<string, unknown>
+    legacy.comfyui = { ...(legacy.comfyui as object), bearerToken: 'legacy-token' }
+
+    expect(SettingsSchema.parse(legacy).comfyui).not.toHaveProperty('bearerToken')
+  })
+})
+
 describe('SettingsSchema MCP protocol mode', () => {
   test.each(['auto', 'legacy'] as const)('parses %s protocol mode', (protocolMode) => {
     const parsed = SettingsSchema.parse({

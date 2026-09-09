@@ -15,6 +15,7 @@ import {
 import platform from '@/platform'
 import storage from '@/storage'
 import { StorageKeyGenerator } from '@/storage/StoreStorage'
+import { COMFYUI_IMAGE_PROVIDER_ID } from '@/packages/comfyui/constants'
 import { trackEvent } from '@/utils/track'
 import {
   addGeneratedImage,
@@ -26,11 +27,13 @@ import {
 } from './imageGenerationStore'
 import { queryClient } from './queryClient'
 import { settingsStore } from './settingsStore'
+import { lastUsedModelStore } from './lastUsedModelStore'
 
 const log = getLogger('image-generation-actions')
 
 // AbortController for cancelling in-flight polling
 let currentAbortController: AbortController | null = null
+let currentComfyUIJob: { promptId: string; recordId: string } | null = null
 
 function getLicenseKey(): string {
   const licenseKey = settingsStore.getState().licenseKey
@@ -152,9 +155,15 @@ export async function startImageGeneration(
 
   store.setCurrentGeneratingId(record.id)
   store.setCurrentRecordId(record.id)
+  lastUsedModelStore.getState().setPictureModel(params.model.provider, params.model.modelId)
   queryClient.setQueryData([IMAGE_GEN_QUERY_KEY, record.id], record)
 
-  const generateFn = shouldUseAsyncPath(params.model.provider) ? generateImages : generateImagesDirect
+  const generateFn =
+    params.model.provider === COMFYUI_IMAGE_PROVIDER_ID
+      ? generateImagesWithComfyUI
+      : shouldUseAsyncPath(params.model.provider)
+        ? generateImages
+        : generateImagesDirect
   const generation = generateFn(record.id, params).finally(() => {
     imageGenerationStore.getState().setCurrentGeneratingId(null)
     queryClient.invalidateQueries({ queryKey: [IMAGE_GEN_LIST_QUERY_KEY] })
@@ -167,6 +176,71 @@ export async function startImageGeneration(
       ? { mode: 'polling', intervalMs: IMAGE_GENERATION_POLL_INTERVAL_MS }
       : { mode: 'direct' },
     completion: generation,
+  }
+}
+
+async function generateImagesWithComfyUI(
+  recordId: string,
+  params: GenerateImageParams
+): Promise<ImageGeneration | null> {
+  const num = params.imageGenerateNum || 1
+  currentAbortController = new AbortController()
+  const signal = currentAbortController.signal
+
+  try {
+    if (params.referenceImages.length > 0) {
+      throw new Error('This ComfyUI workflow supports text-to-image only; remove reference images and retry.')
+    }
+    let currentRecord = await updateRecord(recordId, { status: 'generating' })
+    if (currentRecord) queryClient.setQueryData([IMAGE_GEN_QUERY_KEY, recordId], currentRecord)
+
+    const comfyui = settingsStore.getState().comfyui
+    trackEvent('generate_image', {
+      provider: COMFYUI_IMAGE_PROVIDER_ID,
+      model: params.model.modelId,
+      num_images: num,
+      has_reference: false,
+      path: 'comfyui',
+    })
+    const { generateWithComfyUI } = await import('@/packages/comfyui/client')
+    const result = await generateWithComfyUI(comfyui, {
+      prompt: params.prompt,
+      checkpoint: params.model.modelId,
+      aspectRatio: params.aspectRatio,
+      count: num,
+      signal,
+      onSubmitted: (promptId) => {
+        currentComfyUIJob = { promptId, recordId }
+        void updateRecord(recordId, { taskId: promptId }).then((updated) => {
+          if (updated) queryClient.setQueryData([IMAGE_GEN_QUERY_KEY, recordId], updated)
+        })
+      },
+    })
+
+    for (const image of result.images) {
+      const storageKey = StorageKeyGenerator.picture(`image-gen:${recordId}`)
+      await storage.setBlob(storageKey, image)
+      currentRecord = await addGeneratedImage(recordId, storageKey)
+      if (currentRecord) queryClient.setQueryData([IMAGE_GEN_QUERY_KEY, recordId], currentRecord)
+    }
+    currentRecord = await updateRecord(recordId, {
+      status: result.images.length < num ? 'error' : 'done',
+      error: result.images.length < num ? 'ComfyUI returned fewer images than requested' : undefined,
+    })
+    if (currentRecord) queryClient.setQueryData([IMAGE_GEN_QUERY_KEY, recordId], currentRecord)
+    return currentRecord
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      log.debug('ComfyUI image generation aborted:', recordId)
+      return null
+    }
+    log.error('ComfyUI image generation failed:', err)
+    const updatedRecord = await updateRecord(recordId, getErrorRecordUpdate(err))
+    if (updatedRecord) queryClient.setQueryData([IMAGE_GEN_QUERY_KEY, updatedRecord.id], updatedRecord)
+    return updatedRecord
+  } finally {
+    currentAbortController = null
+    currentComfyUIJob = null
   }
 }
 
@@ -420,6 +494,17 @@ export function cancelGeneration(): void {
       currentAbortController = null
     }
 
+    if (currentComfyUIJob) {
+      const job = currentComfyUIJob
+      currentComfyUIJob = null
+      const comfyui = settingsStore.getState().comfyui
+      void import('@/packages/comfyui/client').then(({ cancelComfyUIJob }) =>
+        cancelComfyUIJob(comfyui, job.promptId).finally(() => {
+          void updateRecord(job.recordId, { status: 'error', error: 'Generation cancelled' })
+        })
+      )
+    }
+
     // Keep status as 'generating' so "Resume Generation" button appears
     store.setCurrentGeneratingId(null)
     queryClient.invalidateQueries({ queryKey: [IMAGE_GEN_LIST_QUERY_KEY] })
@@ -452,6 +537,42 @@ export async function resumeGeneration(recordId: string): Promise<ImageGeneratio
 
   if (!record.taskId) {
     throw new Error('No task ID found for this record')
+  }
+
+  if (record.model.provider === COMFYUI_IMAGE_PROVIDER_ID) {
+    store.setCurrentGeneratingId(recordId)
+    currentAbortController = new AbortController()
+    currentComfyUIJob = { promptId: record.taskId, recordId }
+    try {
+      const { waitForComfyUIImages } = await import('@/packages/comfyui/client')
+      const images = await waitForComfyUIImages(
+        settingsStore.getState().comfyui,
+        record.taskId,
+        currentAbortController.signal
+      )
+      for (let index = record.generatedImages.length; index < images.length; index++) {
+        const storageKey = StorageKeyGenerator.picture(`image-gen:${recordId}`)
+        await storage.setBlob(storageKey, images[index])
+        await addGeneratedImage(recordId, storageKey)
+      }
+      const updated = await updateRecord(recordId, {
+        status: images.length < (record.imageGenerateNum || 1) ? 'error' : 'done',
+        error:
+          images.length < (record.imageGenerateNum || 1) ? 'ComfyUI returned fewer images than requested' : undefined,
+      })
+      if (updated) queryClient.setQueryData([IMAGE_GEN_QUERY_KEY, updated.id], updated)
+      return updated
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') return null
+      const failed = await updateRecord(recordId, getErrorRecordUpdate(err))
+      if (failed) queryClient.setQueryData([IMAGE_GEN_QUERY_KEY, failed.id], failed)
+      return failed
+    } finally {
+      currentAbortController = null
+      currentComfyUIJob = null
+      store.setCurrentGeneratingId(null)
+      queryClient.invalidateQueries({ queryKey: [IMAGE_GEN_LIST_QUERY_KEY] })
+    }
   }
 
   const licenseKey = getLicenseKey()
@@ -556,7 +677,12 @@ export async function retryGeneration(recordId: string): Promise<void> {
     aspectRatio: record.aspectRatio,
   }
 
-  const generateFn = shouldUseAsyncPath(params.model.provider) ? generateImages : generateImagesDirect
+  const generateFn =
+    params.model.provider === COMFYUI_IMAGE_PROVIDER_ID
+      ? generateImagesWithComfyUI
+      : shouldUseAsyncPath(params.model.provider)
+        ? generateImages
+        : generateImagesDirect
   void generateFn(recordId, params).finally(() => {
     imageGenerationStore.getState().setCurrentGeneratingId(null)
     queryClient.invalidateQueries({ queryKey: [IMAGE_GEN_LIST_QUERY_KEY] })

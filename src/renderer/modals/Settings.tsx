@@ -22,6 +22,7 @@ import { RouteComponent as SettingsAgentRouteComponent } from '@/routes/settings
 import { RouteComponent as SettingsArchiveRouteComponent } from '@/routes/settings/archive'
 import { RouteComponent as SettingsChatRouteComponent } from '@/routes/settings/chat'
 import { RouteComponent as SettingsChatboxAiRouteComponent } from '@/routes/settings/chatbox-ai'
+import { RouteComponent as SettingsComfyuiRouteComponent } from '@/routes/settings/comfyui'
 import { RouteComponent as SettingsDefaultModelsRouteComponent } from '@/routes/settings/default-models'
 import { RouteComponent as SettingsDocumentParserRouteComponent } from '@/routes/settings/document-parser'
 import { RouteComponent as SettingsGeneralRouteComponent } from '@/routes/settings/general'
@@ -127,6 +128,12 @@ const SettingsDefaultModelsRoute = createRoute({
   getParentRoute: () => RootRoute,
 })
 
+const SettingsComfyuiRoute = createRoute({
+  component: SettingsComfyuiRouteComponent,
+  path: '/settings/comfyui',
+  getParentRoute: () => RootRoute,
+})
+
 const SettingsProviderRouteRoute = createRoute({
   component: SettingsProviderRouteRouteComponent,
   path: '/settings/provider',
@@ -172,6 +179,7 @@ const routeTree = RootRoute.addChildren([
   SettingsDocumentParserRoute,
   SettingsHotkeysRoute,
   SettingsDefaultModelsRoute,
+  SettingsComfyuiRoute,
   SettingsProviderRouteRoute,
 ])
 

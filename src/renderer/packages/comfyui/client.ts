@@ -1,0 +1,410 @@
+import { CapacitorHttp } from '@capacitor/core'
+import type { Settings } from '@shared/types'
+import platform from '@/platform'
+import { COMFYUI_WORKFLOW_MODEL_ID } from './constants'
+
+type ComfyUISettings = Settings['comfyui']
+type JsonRecord = Record<string, unknown>
+
+export interface ComfyUIImageDescriptor {
+  filename: string
+  subfolder?: string
+  type?: string
+}
+
+export interface ComfyUIGenerationOptions {
+  prompt: string
+  negativePrompt?: string
+  checkpoint?: string
+  aspectRatio?: string
+  count?: number
+  signal?: AbortSignal
+  onSubmitted?: (promptId: string) => void
+}
+
+function asRecord(value: unknown): JsonRecord | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as JsonRecord) : undefined
+}
+
+function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return promise
+  if (signal.aborted) return Promise.reject(signal.reason ?? new DOMException('Aborted', 'AbortError'))
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(signal.reason ?? new DOMException('Aborted', 'AbortError'))
+    signal.addEventListener('abort', onAbort, { once: true })
+    promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort))
+  })
+}
+
+export function normalizeComfyUIEndpoint(rawEndpoint: string): string {
+  const value = rawEndpoint.trim()
+  if (!value) throw new Error('ComfyUI endpoint is required')
+  let endpoint: URL
+  try {
+    endpoint = new URL(value)
+  } catch {
+    throw new Error('The ComfyUI endpoint is invalid')
+  }
+  if (endpoint.protocol !== 'http:' && endpoint.protocol !== 'https:') {
+    throw new Error('The ComfyUI endpoint must use HTTP or HTTPS')
+  }
+  if (endpoint.username || endpoint.password) {
+    throw new Error('ComfyUI endpoints containing credentials are not allowed')
+  }
+  endpoint.hash = ''
+  endpoint.search = ''
+  endpoint.pathname = endpoint.pathname.replace(/\/+$/, '')
+  return endpoint.toString().replace(/\/$/, '')
+}
+
+function encodeUtf8Base64(value: string): string {
+  const bytes = new TextEncoder().encode(value)
+  let binary = ''
+  for (const byte of bytes) binary += String.fromCharCode(byte)
+  return btoa(binary)
+}
+
+export function buildComfyUIHeaders(settings: ComfyUISettings): Record<string, string> {
+  const result: Record<string, string> = { Accept: 'application/json' }
+  const username = settings.username?.trim() ?? ''
+  const password = settings.password ?? ''
+  if (username || password) {
+    result.Authorization = `Basic ${encodeUtf8Base64(`${username}:${password}`)}`
+  }
+  return result
+}
+
+async function requestJson(
+  settings: ComfyUISettings,
+  path: string,
+  options: { method?: string; body?: unknown; signal?: AbortSignal } = {}
+): Promise<unknown> {
+  const url = `${normalizeComfyUIEndpoint(settings.endpoint)}${path}`
+  const method = options.method ?? 'GET'
+  const requestHeaders = buildComfyUIHeaders(settings)
+  if (options.body !== undefined) requestHeaders['Content-Type'] = 'application/json'
+
+  if (platform.type === 'mobile') {
+    const response = await abortable(
+      CapacitorHttp.request({
+        url,
+        method,
+        headers: requestHeaders,
+        data: options.body,
+        responseType: 'json',
+        connectTimeout: 15_000,
+        readTimeout: Math.min(settings.timeoutSeconds * 1000, 120_000),
+      }),
+      options.signal
+    )
+    if (response.status < 200 || response.status >= 300) {
+      throw new Error(`ComfyUI returned HTTP ${response.status}`)
+    }
+    return response.data
+  }
+
+  const response = await fetch(url, {
+    method,
+    headers: requestHeaders,
+    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    signal: options.signal,
+  })
+  if (!response.ok) throw new Error(`ComfyUI returned HTTP ${response.status}`)
+  return response.status === 204 ? undefined : response.json()
+}
+
+export async function checkComfyUIConnection(settings: ComfyUISettings, signal?: AbortSignal): Promise<void> {
+  await requestJson(settings, '/system_stats', { signal })
+}
+
+export async function loadComfyUICheckpoints(settings: ComfyUISettings, signal?: AbortSignal): Promise<string[]> {
+  const payload = await requestJson(settings, '/models/checkpoints', { signal })
+  const values = Array.isArray(payload)
+    ? payload
+    : Array.isArray(asRecord(payload)?.checkpoints)
+      ? (asRecord(payload)?.checkpoints as unknown[])
+      : []
+  return values.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+}
+
+export function parseComfyUIWorkflow(workflowJson: string): JsonRecord {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(workflowJson)
+  } catch {
+    throw new Error('The ComfyUI workflow is not valid JSON')
+  }
+  const root = asRecord(parsed)
+  const workflow = asRecord(root?.prompt) ?? root
+  if (!workflow || Object.keys(workflow).length === 0) {
+    throw new Error('The ComfyUI workflow must use API format')
+  }
+  for (const [nodeId, node] of Object.entries(workflow)) {
+    if (!asRecord(node)?.inputs || !asRecord(asRecord(node)?.inputs)) {
+      throw new Error(`ComfyUI workflow node ${nodeId} has no inputs object`)
+    }
+  }
+  return structuredClone(workflow)
+}
+
+function nodeClass(node: unknown): string {
+  const value = asRecord(node)?.class_type
+  return typeof value === 'string' ? value : ''
+}
+
+function autoTarget(workflow: JsonRecord, kind: keyof ComfyUISettings['inputMapping']): string | undefined {
+  const nodes = Object.entries(workflow)
+  const byClass = (pattern: RegExp) => nodes.find(([, node]) => pattern.test(nodeClass(node)))?.[0]
+  if (kind === 'positivePrompt' || kind === 'negativePrompt') {
+    const textNodes = nodes.filter(([, node]) => /CLIPTextEncode/i.test(nodeClass(node)))
+    const node = textNodes[kind === 'positivePrompt' ? 0 : 1]?.[0]
+    return node ? `${node}.text` : undefined
+  }
+  if (kind === 'checkpoint') {
+    const node = byClass(/CheckpointLoader/i)
+    return node ? `${node}.ckpt_name` : undefined
+  }
+  if (kind === 'width' || kind === 'height' || kind === 'batchSize') {
+    const node = byClass(/EmptyLatentImage/i)
+    const input = kind === 'batchSize' ? 'batch_size' : kind
+    return node ? `${node}.${input}` : undefined
+  }
+  if (kind === 'seed' || kind === 'steps') {
+    const node = byClass(/KSampler/i)
+    return node ? `${node}.${kind}` : undefined
+  }
+  return undefined
+}
+
+function applyInput(workflow: JsonRecord, target: string | undefined, value: unknown, required = false): void {
+  if (!target || value === undefined) {
+    if (required) throw new Error('The ComfyUI positive prompt mapping is missing')
+    return
+  }
+  const separator = target.indexOf('.')
+  if (separator <= 0 || separator === target.length - 1) {
+    throw new Error(`Invalid ComfyUI input mapping: ${target}`)
+  }
+  const nodeId = target.slice(0, separator)
+  const inputName = target.slice(separator + 1)
+  const node = asRecord(workflow[nodeId])
+  const inputs = asRecord(node?.inputs)
+  if (!inputs) throw new Error(`ComfyUI input mapping references missing node: ${nodeId}`)
+  if (!(inputName in inputs)) throw new Error(`ComfyUI node ${nodeId} has no input named ${inputName}`)
+  inputs[inputName] = value
+}
+
+function dimensionTarget(
+  workflow: JsonRecord,
+  mapping: ComfyUISettings['inputMapping'],
+  kind: 'width' | 'height'
+): string | undefined {
+  const explicit = mapping[kind]?.trim()
+  if (explicit) return explicit
+  const standard = autoTarget(workflow, kind)
+  if (standard) return standard
+  const generic = Object.entries(workflow).find(([, node]) => kind in (asRecord(asRecord(node)?.inputs) ?? {}))?.[0]
+  return generic ? `${generic}.${kind}` : undefined
+}
+
+function dimensionInput(
+  workflow: JsonRecord,
+  target: string
+): { inputs: JsonRecord; inputName: string; value: unknown } {
+  const separator = target.indexOf('.')
+  if (separator <= 0 || separator === target.length - 1) {
+    throw new Error(`Invalid ComfyUI input mapping: ${target}`)
+  }
+  const nodeId = target.slice(0, separator)
+  const inputName = target.slice(separator + 1)
+  const inputs = asRecord(asRecord(workflow[nodeId])?.inputs)
+  if (!inputs) throw new Error(`ComfyUI input mapping references missing node: ${nodeId}`)
+  return { inputs, inputName, value: inputs[inputName] }
+}
+
+function hasConfiguredDimension(value: unknown): boolean {
+  if (typeof value === 'number') return Number.isFinite(value) && value > 0
+  if (typeof value === 'string') return value.trim().length > 0 && Number.isFinite(Number(value)) && Number(value) > 0
+  if (Array.isArray(value)) return value.length > 0
+  return value !== null && typeof value === 'object'
+}
+
+function numericDimension(value: unknown): number | undefined {
+  if (typeof value !== 'number' && typeof value !== 'string') return undefined
+  const number = Number(value)
+  return Number.isFinite(number) && number > 0 ? number : undefined
+}
+
+export function inspectComfyUIWorkflowDimensions(
+  workflowJson: string,
+  mapping: ComfyUISettings['inputMapping']
+): { width?: number; height?: number; configured: boolean } {
+  const workflow = parseComfyUIWorkflow(workflowJson)
+  const widthTarget = dimensionTarget(workflow, mapping, 'width')
+  const heightTarget = dimensionTarget(workflow, mapping, 'height')
+  if (!widthTarget || !heightTarget) return { configured: false }
+  const widthValue = dimensionInput(workflow, widthTarget).value
+  const heightValue = dimensionInput(workflow, heightTarget).value
+  return {
+    width: numericDimension(widthValue),
+    height: numericDimension(heightValue),
+    configured: hasConfiguredDimension(widthValue) && hasConfiguredDimension(heightValue),
+  }
+}
+
+function applyDefaultDimensions(workflow: JsonRecord, settings: ComfyUISettings): void {
+  const widthTarget = dimensionTarget(workflow, settings.inputMapping, 'width')
+  const heightTarget = dimensionTarget(workflow, settings.inputMapping, 'height')
+  if (!widthTarget || !heightTarget) {
+    throw new Error('The ComfyUI workflow has no recognizable width and height inputs')
+  }
+  const width = dimensionInput(workflow, widthTarget)
+  const height = dimensionInput(workflow, heightTarget)
+  if (!hasConfiguredDimension(width.value)) width.inputs[width.inputName] = settings.defaultWidth
+  if (!hasConfiguredDimension(height.value)) height.inputs[height.inputName] = settings.defaultHeight
+}
+
+export function buildComfyUIPrompt(
+  settings: ComfyUISettings,
+  options: Pick<ComfyUIGenerationOptions, 'prompt' | 'negativePrompt' | 'checkpoint' | 'aspectRatio' | 'count'>
+): JsonRecord {
+  const workflow = parseComfyUIWorkflow(settings.workflowJson)
+  const mapping = settings.inputMapping
+  const target = (kind: keyof typeof mapping) => mapping[kind]?.trim() || autoTarget(workflow, kind)
+  applyInput(workflow, target('positivePrompt'), options.prompt, true)
+  applyInput(workflow, target('negativePrompt'), options.negativePrompt ?? settings.defaultNegativePrompt ?? '')
+  if (options.checkpoint && options.checkpoint !== COMFYUI_WORKFLOW_MODEL_ID) {
+    applyInput(workflow, target('checkpoint'), options.checkpoint)
+  }
+  applyDefaultDimensions(workflow, settings)
+  applyInput(workflow, target('seed'), Math.floor(Math.random() * 1_000_000_000_000_000))
+  applyInput(workflow, target('batchSize'), Math.max(1, Math.min(options.count ?? 1, 4)))
+  return workflow
+}
+
+function historyImages(payload: unknown, promptId: string, outputNodeId?: string): ComfyUIImageDescriptor[] | null {
+  const root = asRecord(payload)
+  const history = asRecord(root?.[promptId]) ?? (root && 'outputs' in root ? root : undefined)
+  if (!history) return null
+  const status = asRecord(history.status)
+  if (status?.status_str === 'error') throw new Error('ComfyUI reported a workflow execution error')
+  const outputs = asRecord(history.outputs)
+  if (!outputs) return []
+  const selectedOutputs = outputNodeId ? [[outputNodeId, outputs[outputNodeId]] as const] : Object.entries(outputs)
+  const images: ComfyUIImageDescriptor[] = []
+  for (const [, output] of selectedOutputs) {
+    const candidates = asRecord(output)?.images
+    if (!Array.isArray(candidates)) continue
+    for (const candidate of candidates) {
+      const image = asRecord(candidate)
+      if (typeof image?.filename !== 'string') continue
+      images.push({
+        filename: image.filename,
+        subfolder: typeof image.subfolder === 'string' ? image.subfolder : undefined,
+        type: typeof image.type === 'string' ? image.type : undefined,
+      })
+    }
+  }
+  return images
+}
+
+async function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result))
+    reader.onerror = () => reject(reader.error ?? new Error('Unable to read the ComfyUI image'))
+    reader.readAsDataURL(blob)
+  })
+}
+
+async function downloadImage(
+  settings: ComfyUISettings,
+  descriptor: ComfyUIImageDescriptor,
+  signal?: AbortSignal
+): Promise<string> {
+  const query = new URLSearchParams({ filename: descriptor.filename })
+  if (descriptor.subfolder) query.set('subfolder', descriptor.subfolder)
+  if (descriptor.type) query.set('type', descriptor.type)
+  const url = `${normalizeComfyUIEndpoint(settings.endpoint)}/view?${query}`
+  const requestHeaders = buildComfyUIHeaders(settings)
+
+  if (platform.type === 'mobile') {
+    const response = await abortable(
+      CapacitorHttp.request({ url, method: 'GET', headers: requestHeaders, responseType: 'blob' }),
+      signal
+    )
+    if (response.status < 200 || response.status >= 300) throw new Error(`ComfyUI returned HTTP ${response.status}`)
+    if (typeof response.data !== 'string') throw new Error('ComfyUI returned an invalid image')
+    return response.data.startsWith('data:') ? response.data : `data:image/png;base64,${response.data}`
+  }
+
+  const response = await fetch(url, { headers: requestHeaders, signal })
+  if (!response.ok) throw new Error(`ComfyUI returned HTTP ${response.status}`)
+  return blobToDataUrl(await response.blob())
+}
+
+export async function generateWithComfyUI(
+  settings: ComfyUISettings,
+  options: ComfyUIGenerationOptions
+): Promise<{ promptId: string; images: string[] }> {
+  if (!settings.enabled) throw new Error('ComfyUI is disabled')
+  const clientId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`
+  const workflow = buildComfyUIPrompt(settings, options)
+  const submission = asRecord(
+    await requestJson(settings, '/prompt', {
+      method: 'POST',
+      body: { prompt: workflow, client_id: clientId },
+      signal: options.signal,
+    })
+  )
+  const promptId = typeof submission?.prompt_id === 'string' ? submission.prompt_id : undefined
+  if (!promptId) {
+    const detail = asRecord(submission?.node_errors)
+    throw new Error(
+      detail ? `ComfyUI rejected the workflow: ${JSON.stringify(detail)}` : 'ComfyUI returned no prompt id'
+    )
+  }
+  options.onSubmitted?.(promptId)
+
+  const images = await waitForComfyUIImages(settings, promptId, options.signal)
+  return { promptId, images }
+}
+
+export async function waitForComfyUIImages(
+  settings: ComfyUISettings,
+  promptId: string,
+  signal?: AbortSignal
+): Promise<string[]> {
+  const deadline = Date.now() + settings.timeoutSeconds * 1000
+  let descriptors: ComfyUIImageDescriptor[] | null = null
+  while (descriptors === null && Date.now() < deadline) {
+    if (signal?.aborted) throw signal.reason ?? new DOMException('Aborted', 'AbortError')
+    descriptors = historyImages(
+      await requestJson(settings, `/history/${encodeURIComponent(promptId)}`, { signal }),
+      promptId,
+      settings.outputNodeId?.trim() || undefined
+    )
+    if (descriptors === null) {
+      await abortable(new Promise((resolve) => setTimeout(resolve, settings.pollIntervalMs)), signal)
+    }
+  }
+  if (descriptors === null) throw new Error(`ComfyUI timed out after ${settings.timeoutSeconds} seconds`)
+  if (descriptors.length === 0) throw new Error('ComfyUI completed without returning an image')
+  return Promise.all(descriptors.map((image) => downloadImage(settings, image, signal)))
+}
+
+export async function cancelComfyUIJob(
+  settings: ComfyUISettings,
+  promptId: string,
+  signal?: AbortSignal
+): Promise<void> {
+  const queue = asRecord(await requestJson(settings, '/queue', { signal }).catch(() => undefined))
+  const running = Array.isArray(queue?.queue_running) ? queue.queue_running : []
+  const isRunning = running.some((entry) => Array.isArray(entry) && entry.some((value) => value === promptId))
+  await requestJson(settings, '/queue', { method: 'POST', body: { delete: [promptId] }, signal }).catch(() => undefined)
+  // /interrupt is global to a ComfyUI instance. Only use it when this exact
+  // prompt is running, so cancelling a queued Chatbox job cannot stop another client.
+  if (isRunning) {
+    await requestJson(settings, '/interrupt', { method: 'POST', body: {}, signal }).catch(() => undefined)
+  }
+}

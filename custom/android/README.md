@@ -50,14 +50,17 @@ The reproducible native overrides are kept here:
 The decoded build wrapper is intentionally kept outside this Git worktree at
 `../../../chatbox-v1.23.1-apk-build` so thousands of generated files are not mixed
 with the maintained TypeScript changes. The current signed output is
-`../../../chatbox-1.23.1-custom-v492-signed.apk` (`versionName 1.23.1.492`,
-`versionCode 492`). v492 includes the earlier Settings Store crash fix plus
+`../../../chatbox-1.23.1-custom-v495-signed.apk` (`versionName 1.23.1.495`,
+`versionCode 495`). v495 includes the earlier Settings Store crash fix plus
 Android Skills/remote MCP, media and diagram rendering, offline KaTeX,
 session-attachment inline/retrieval selection, native embedding/reranking
 requests, cross-platform automatic attachment routing, and automatic title
 generation for copilot sessions. It also adds a configurable self-hosted
 Firecrawl webpage reader, deterministic image-search routing with fallback
-media cards, and modern adaptive Mermaid styling. Mobile attachment indexing
+media cards, modern adaptive Mermaid styling, and self-hosted ComfyUI image
+generation with Basic Auth username/password, API workflows, workflow-first
+dimensions with configurable width/height fallbacks, and a default image model.
+Mobile attachment indexing
 additionally retries transient batch failures, saves completed batches as
 checkpoints, resumes from the first missing vector, and distinguishes indexing
 failures from parsing failures in the UI. See the local handoff outside the
@@ -69,3 +72,8 @@ Security note: trusting a user-installed CA enables HTTPS to servers signed by
 that CA, but does not disable TLS or hostname validation. Installing an
 untrusted CA on the phone grants it the same trust for this app, so only install
 the CA that controls the intended server.
+
+`comfyui-workflows/sd15-basic-api.json` is the minimal 512×512 SD 1.5 API
+workflow used for the v495 Android end-to-end generation check. Its standard
+nodes are auto-detected by Chatbox and its configured dimensions intentionally
+take precedence over the 1024×1024 fallback values.

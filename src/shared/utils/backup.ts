@@ -25,6 +25,12 @@ export function cleanSettingsForBackup(settings: Settings, includeKeys: boolean)
     delete cleaned.lastSelectedLicenseByUser
     delete cleaned.memorizedManualLicenseKey
     delete cleaned.vibedropPublishKey
+    if (settings.comfyui) {
+      const comfyui = { ...settings.comfyui }
+      delete comfyui.password
+      delete (comfyui as Record<string, unknown>).bearerToken
+      cleaned.comfyui = comfyui
+    }
     if (settings.providers) {
       cleaned.providers = Object.fromEntries(
         Object.entries(settings.providers).map(([id, provider]) => [id, withoutProviderCredentials(provider)])

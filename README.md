@@ -58,7 +58,7 @@ We regularly sync code from the pro repo to this repo, and vice versa.
 
 This fork is based on the official Chatbox `v1.23.1` source and carries an
 Android-focused secondary-development branch. The current custom build version
-is `1.23.1.492`. It retains the upstream desktop and web code while adding the
+is `1.23.1.495`. It retains the upstream desktop and web code while adding the
 following Android capabilities:
 
 - Read-only Skills directory access through Android SAF, in-chat `load_skill`,
@@ -73,6 +73,11 @@ following Android capabilities:
   a self-hosted Firecrawl service. Firecrawl supports an optional Bearer token,
   a bounded timeout, Android native HTTP transport, and an explicit native
   fallback switch that is disabled by default.
+- First-class self-hosted ComfyUI image generation with endpoint and optional
+  Basic Auth username/password, API-workflow import, standard-node auto-detection,
+  explicit parameter mapping, checkpoint discovery, polling/cancellation,
+  result download into local history, and a configurable default image model.
+  Existing cloud image providers remain available.
 - Soul/persona injection for new Android conversations and automatic titles for
   copilot sessions without overwriting titles edited by the user.
 - Local Android network diagnostics, including DNS, ping/TCP/HTTP/TLS, Wi-Fi and
@@ -114,6 +119,25 @@ requires one, choose a timeout, and use **Check connection** to run a real scrap
 request. Enable **Fall back to native reading** only if the Android device is
 allowed to fetch the target page itself when Firecrawl fails; leaving it
 disabled keeps webpage traffic on Firecrawl.
+
+### ComfyUI setup
+
+Open **Settings → ComfyUI Image Generation**, enter the base URL of ComfyUI or
+an authenticated reverse proxy, and add the Basic Auth username and password
+when required.
+Export a workflow from ComfyUI with **Save (API Format)** and import its JSON.
+Standard checkpoint, prompt, sampler, and latent-image nodes are detected
+automatically; custom workflows can map inputs with `nodeId.inputName`. Use
+**Check ComfyUI Connection**, then optionally choose a checkpoint under
+**Settings → Default Models → Default Image Generation Model**.
+
+Valid width and height values (or node links) already present in the workflow
+take precedence. The configurable default width and height only fill missing or
+invalid workflow inputs. Chatbox hides its generic aspect-ratio selector while
+ComfyUI is selected because the workflow owns the final dimensions.
+
+A minimal SD 1.5 API workflow used for Android end-to-end testing is available
+at [`custom/android/comfyui-workflows/sd15-basic-api.json`](./custom/android/comfyui-workflows/sd15-basic-api.json).
 
 ## Download
 
