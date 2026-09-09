@@ -9,6 +9,9 @@ const getImageGenerationByIdMock = vi.fn()
 const setQueryDataMock = vi.fn()
 const invalidateQueriesMock = vi.fn()
 const getImageMock = vi.fn()
+const setBlobMock = vi.fn()
+const addGeneratedImageMock = vi.fn()
+const generateWithComfyUIMock = vi.fn()
 const setCurrentGeneratingIdMock = vi.fn()
 const setCurrentRecordIdMock = vi.fn()
 const trackEventMock = vi.fn()
@@ -28,12 +31,17 @@ vi.mock('@/packages/remote', () => ({
   pollImageTask: pollImageTaskMock,
 }))
 
+vi.mock('@/packages/comfyui/client', () => ({
+  generateWithComfyUI: generateWithComfyUIMock,
+  cancelComfyUIJob: vi.fn(),
+}))
+
 vi.mock('./imageGenerationStore', () => ({
   IMAGE_GEN_LIST_QUERY_KEY: 'image-gen-list',
   IMAGE_GEN_QUERY_KEY: 'image-gen',
   createRecord: createRecordMock,
   updateRecord: updateRecordMock,
-  addGeneratedImage: vi.fn(),
+  addGeneratedImage: addGeneratedImageMock,
   imageGenerationStore: {
     getState: () => ({
       currentGeneratingId: null,
@@ -55,6 +63,12 @@ vi.mock('./settingsStore', () => ({
   settingsStore: {
     getState: () => ({
       licenseKey: 'license-key',
+      comfyui: {
+        workflowProfiles: [
+          { id: 'img2img', capabilities: { textToImage: false, imageToImage: true, lora: false, controlNet: false } },
+        ],
+        activeWorkflowId: 'img2img',
+      },
     }),
   },
 }))
@@ -85,11 +99,11 @@ vi.mock('@/platform', () => ({
 }))
 
 vi.mock('@/storage', () => ({
-  default: {},
+  default: { setBlob: setBlobMock },
 }))
 
 vi.mock('@/storage/StoreStorage', () => ({
-  StorageKeyGenerator: {},
+  StorageKeyGenerator: { picture: () => 'generated-storage-key' },
 }))
 
 describe('imageGenerationActions reference image payload', () => {
@@ -112,6 +126,8 @@ describe('imageGenerationActions reference image payload', () => {
       ],
     })
     getImageMock.mockResolvedValue('data:image/png;base64,AAAA')
+    generateWithComfyUIMock.mockResolvedValue({ promptId: 'comfy-prompt-1', images: ['data:image/png;base64,BBBB'] })
+    addGeneratedImageMock.mockResolvedValue({ id: 'record-1', status: 'generating' })
     getImageGenerationByIdMock.mockResolvedValue({
       id: 'record-1',
       prompt: 'make an image',
@@ -180,6 +196,26 @@ describe('imageGenerationActions reference image payload', () => {
       status: 'done',
       generatedImages: ['https://example.com/output.png'],
     })
+  })
+
+  it('loads one stored reference image and sends it to an image-to-image ComfyUI workflow', async () => {
+    const { createAndGenerate } = await import('./imageGenerationActions')
+
+    await createAndGenerate({
+      prompt: 'restyle it',
+      referenceImages: ['stored-reference'],
+      model: { provider: 'comfyui', modelId: '__workflow_default__' },
+      imageGenerateNum: 1,
+    })
+    await vi.waitFor(() => expect(generateWithComfyUIMock).toHaveBeenCalledOnce())
+
+    expect(getImageMock).toHaveBeenCalledWith('stored-reference')
+    expect(generateWithComfyUIMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ prompt: 'restyle it', referenceImage: 'data:image/png;base64,AAAA' })
+    )
+    expect(setBlobMock).toHaveBeenCalledWith('generated-storage-key', 'data:image/png;base64,BBBB')
+    expect(trackEventMock).toHaveBeenCalledWith('generate_image', expect.objectContaining({ has_reference: true }))
   })
 
   it('persists caller retry metadata before starting the provider request', async () => {

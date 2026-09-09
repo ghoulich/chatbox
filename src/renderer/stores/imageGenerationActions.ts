@@ -4,6 +4,7 @@ import type { ImageGeneration, ImageGenerationModel, ImageGenerationSource } fro
 import { ModelProviderEnum } from '@shared/types'
 import { createModelDependencies } from '@/adapters'
 import { normalizePlausibleModel, normalizePlausibleProvider } from '@/analytics/plausible'
+import i18n from '@/i18n'
 import { getLogger } from '@/lib/utils'
 import {
   IMAGE_GENERATION_POLL_INTERVAL_MS,
@@ -188,24 +189,58 @@ async function generateImagesWithComfyUI(
   const signal = currentAbortController.signal
 
   try {
-    if (params.referenceImages.length > 0) {
-      throw new Error('This ComfyUI workflow supports text-to-image only; remove reference images and retry.')
+    const comfyui = settingsStore.getState().comfyui
+    const activeProfile = comfyui.workflowProfiles.find((profile) => profile.id === comfyui.activeWorkflowId)
+    if (params.referenceImages.length > 1)
+      throw new Error(
+        i18n.t('ComfyUI workflows currently accept only one reference image.') ??
+          'ComfyUI workflows currently accept only one reference image.'
+      )
+    if (params.referenceImages.length > 0 && !activeProfile?.capabilities.imageToImage) {
+      throw new Error(
+        i18n.t('The active ComfyUI workflow does not accept a reference image.') ??
+          'The active ComfyUI workflow does not accept a reference image.'
+      )
+    }
+    if (params.referenceImages.length === 0 && activeProfile?.capabilities.imageToImage) {
+      throw new Error(
+        i18n.t('The active ComfyUI workflow requires one reference image.') ??
+          'The active ComfyUI workflow requires one reference image.'
+      )
+    }
+    let referenceImage: string | undefined
+    const reference = params.referenceImages[0]
+    if (reference) {
+      referenceImage =
+        reference.startsWith('http://') || reference.startsWith('https://')
+          ? await fetch(reference, { signal }).then(async (response) => {
+              if (!response.ok) throw new Error(`Unable to load reference image: HTTP ${response.status}`)
+              const blob = await response.blob()
+              return new Promise<string>((resolve, reject) => {
+                const reader = new FileReader()
+                reader.onload = () => resolve(String(reader.result))
+                reader.onerror = () => reject(reader.error ?? new Error('Unable to read reference image'))
+                reader.readAsDataURL(blob)
+              })
+            })
+          : await (await createModelDependencies()).storage.getImage(reference)
+      if (!referenceImage) throw new Error('Unable to load the reference image')
     }
     let currentRecord = await updateRecord(recordId, { status: 'generating' })
     if (currentRecord) queryClient.setQueryData([IMAGE_GEN_QUERY_KEY, recordId], currentRecord)
 
-    const comfyui = settingsStore.getState().comfyui
     trackEvent('generate_image', {
       provider: COMFYUI_IMAGE_PROVIDER_ID,
       model: params.model.modelId,
       num_images: num,
-      has_reference: false,
+      has_reference: Boolean(referenceImage),
       path: 'comfyui',
     })
     const { generateWithComfyUI } = await import('@/packages/comfyui/client')
     const result = await generateWithComfyUI(comfyui, {
       prompt: params.prompt,
       checkpoint: params.model.modelId,
+      referenceImage,
       aspectRatio: params.aspectRatio,
       count: num,
       signal,

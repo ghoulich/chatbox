@@ -487,6 +487,62 @@ const ComfyUIInputMappingSchema = z.object({
   seed: z.string().optional().catch(undefined),
   steps: z.string().optional().catch(undefined),
   batchSize: z.string().optional().catch(undefined),
+  image: z.string().optional().catch(undefined),
+  denoise: z.string().optional().catch(undefined),
+})
+
+const ComfyUIWorkflowCapabilitiesSchema = z.object({
+  textToImage: z.boolean().default(true),
+  imageToImage: z.boolean().default(false),
+  lora: z.boolean().default(false),
+  controlNet: z.boolean().default(false),
+})
+
+const ComfyUIWorkflowRemoteSchema = z.object({
+  id: z.string(),
+  revision: z.number().int().min(1),
+  contentHash: z.string().optional().catch(undefined),
+  updatedAt: z.string().optional().catch(undefined),
+  uiPath: z.string().optional().catch(undefined),
+})
+
+const ComfyUIWorkflowBuilderSchema = z.object({
+  mode: z.enum(['text-to-image', 'image-to-image', 'controlnet']).default('text-to-image'),
+  checkpoint: z.string().default(''),
+  width: z.number().int().min(64).max(8192).default(512),
+  height: z.number().int().min(64).max(8192).default(512),
+  sampler: z.string().default('euler'),
+  scheduler: z.string().default('normal'),
+  steps: z.number().int().min(1).max(150).default(20),
+  cfg: z.number().min(0).max(100).default(7),
+  seed: z.number().int().min(-1).default(-1),
+  denoise: z.number().min(0).max(1).default(0.75),
+  loraName: z.string().optional().catch(undefined),
+  loraStrength: z.number().min(-10).max(10).default(1),
+  controlNetName: z.string().optional().catch(undefined),
+  controlNetStrength: z.number().min(0).max(10).default(1),
+  controlNetStart: z.number().min(0).max(1).default(0),
+  controlNetEnd: z.number().min(0).max(1).default(1),
+})
+
+const ComfyUIWorkflowProfileSchema = z.object({
+  id: z.string(),
+  name: z.string().min(1),
+  apiWorkflowJson: z.string(),
+  uiWorkflowJson: z.string().optional().catch(undefined),
+  inputMapping: ComfyUIInputMappingSchema.default({}),
+  outputNodeId: z.string().optional().catch(undefined),
+  defaultNegativePrompt: z.string().optional().catch(undefined),
+  capabilities: ComfyUIWorkflowCapabilitiesSchema.default({
+    textToImage: true,
+    imageToImage: false,
+    lora: false,
+    controlNet: false,
+  }),
+  builder: ComfyUIWorkflowBuilderSchema.optional().catch(undefined),
+  remote: ComfyUIWorkflowRemoteSchema.optional().catch(undefined),
+  createdAt: z.number().int().nonnegative(),
+  updatedAt: z.number().int().nonnegative(),
 })
 
 const ComfyUISettingsSchema = z.object({
@@ -494,6 +550,9 @@ const ComfyUISettingsSchema = z.object({
   endpoint: z.string().default(''),
   username: z.string().optional().catch(undefined),
   password: z.string().optional().catch(undefined),
+  userId: z.string().optional().catch(undefined),
+  workflowProfiles: z.array(ComfyUIWorkflowProfileSchema).default([]),
+  activeWorkflowId: z.string().optional().catch(undefined),
   workflowName: z.string().default('ComfyUI Workflow'),
   workflowJson: z.string().default(''),
   inputMapping: ComfyUIInputMappingSchema.default({}),
@@ -557,6 +616,7 @@ export const SettingsSchema = GlobalSessionSettingsSchema.extend({
   comfyui: ComfyUISettingsSchema.default({
     enabled: false,
     endpoint: '',
+    workflowProfiles: [],
     workflowName: 'ComfyUI Workflow',
     workflowJson: '',
     inputMapping: {},

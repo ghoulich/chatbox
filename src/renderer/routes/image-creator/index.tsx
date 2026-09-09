@@ -395,9 +395,21 @@ function ImageCreatorPage() {
       toastActions.add(t('Please log in to Chatbox AI first'))
       return
     }
-    if (selectedProvider === COMFYUI_IMAGE_PROVIDER_ID && referenceImages.length > 0) {
-      toastActions.add(t('The current ComfyUI integration supports text-to-image workflows only.'))
-      return
+    if (selectedProvider === COMFYUI_IMAGE_PROVIDER_ID) {
+      const comfyui = settingsStore.getState().comfyui
+      const profile = comfyui.workflowProfiles.find((item) => item.id === comfyui.activeWorkflowId)
+      if (referenceImages.length > 1) {
+        toastActions.add(t('ComfyUI workflows currently accept only one reference image.'))
+        return
+      }
+      if (referenceImages.length > 0 && !profile?.capabilities.imageToImage) {
+        toastActions.add(t('The active ComfyUI workflow does not accept a reference image.'))
+        return
+      }
+      if (referenceImages.length === 0 && profile?.capabilities.imageToImage) {
+        toastActions.add(t('The active ComfyUI workflow requires one reference image.'))
+        return
+      }
     }
 
     try {

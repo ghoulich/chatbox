@@ -58,7 +58,7 @@ We regularly sync code from the pro repo to this repo, and vice versa.
 
 This fork is based on the official Chatbox `v1.23.1` source and carries an
 Android-focused secondary-development branch. The current custom build version
-is `1.23.1.495`. It retains the upstream desktop and web code while adding the
+is `1.23.1.497`. It retains the upstream desktop and web code while adding the
 following Android capabilities:
 
 - Read-only Skills directory access through Android SAF, in-chat `load_skill`,
@@ -74,10 +74,14 @@ following Android capabilities:
   a bounded timeout, Android native HTTP transport, and an explicit native
   fallback switch that is disabled by default.
 - First-class self-hosted ComfyUI image generation with endpoint and optional
-  Basic Auth username/password, API-workflow import, standard-node auto-detection,
-  explicit parameter mapping, checkpoint discovery, polling/cancellation,
-  result download into local history, and a configurable default image model.
-  Existing cloud image providers remain available.
+  Basic Auth username/password, checkpoint/LoRA/ControlNet discovery, a
+  multi-workflow library, and a mobile-friendly form designer for text-to-image,
+  image-to-image, optional LoRA, and ControlNet workflows. The companion Workflow
+  Bridge synchronizes paired editable UI-format and executable API-format files,
+  detects revision conflicts, and keeps normal ComfyUI workflows visible without
+  exposing the broad `/userdata` API. Android reference-image upload, generation
+  polling/cancellation, result download into local history, advanced JSON import,
+  and existing cloud image providers remain available.
 - Soul/persona injection for new Android conversations and automatic titles for
   copilot sessions without overwriting titles edited by the user.
 - Local Android network diagnostics, including DNS, ping/TCP/HTTP/TLS, Wi-Fi and
@@ -105,7 +109,7 @@ configuration, and application databases are intentionally not committed.
 
 Implementation notes are in [`custom/android/README.md`](./custom/android/README.md),
 and the latest device/test evidence is in
-[`test-evidence/mumu-v492/TEST_REPORT.md`](./test-evidence/mumu-v492/TEST_REPORT.md).
+[`test-evidence/mumu-v497/TEST_REPORT.md`](./test-evidence/mumu-v497/TEST_REPORT.md).
 The MuMu PDF parser can remain at “Preparing” before indexing; the v491 indexing
 reliability changes were separately verified with a large text attachment on
 MuMu and the same PDF was manually confirmed by the user on a physical phone.
@@ -124,12 +128,24 @@ disabled keeps webpage traffic on Firecrawl.
 
 Open **Settings → ComfyUI Image Generation**, enter the base URL of ComfyUI or
 an authenticated reverse proxy, and add the Basic Auth username and password
-when required.
-Export a workflow from ComfyUI with **Save (API Format)** and import its JSON.
-Standard checkpoint, prompt, sampler, and latent-image nodes are detected
-automatically; custom workflows can map inputs with `nodeId.inputName`. Use
-**Check ComfyUI Connection**, then optionally choose a checkpoint under
-**Settings → Default Models → Default Image Generation Model**.
+when required. Set **ComfyUI User ID** only when the server uses the `Comfy-User`
+header. Use **Check ComfyUI Connection** to load checkpoints, LoRAs, and
+ControlNet models, then use **Check Workflow Bridge** to verify synchronization.
+
+The **Workflow Designer** creates paired editable and executable workflows from
+a compact form. It supports text-to-image, image-to-image, one optional LoRA,
+and ControlNet; image-to-image and ControlNet require one reference image per
+generation. Use **Workflow Library** to select, push, pull, or delete synchronized
+profiles. Concurrent edits are protected by remote revision checks instead of
+silently overwriting another client's changes. A workflow created normally in
+ComfyUI must first be opened there and synchronized with **Chatbox Bridge → Sync
+current workflow to ChatBox** before it appears as a managed workflow in Chatbox.
+
+Advanced users can still import or paste API-format JSON. Standard checkpoint,
+prompt, sampler, latent-image, image-loading, LoRA, and ControlNet nodes are
+detected where supported; custom workflows can map inputs with
+`nodeId.inputName`. A checkpoint can optionally be selected under **Settings →
+Default Models → Default Image Generation Model**.
 
 Valid width and height values (or node links) already present in the workflow
 take precedence. The configurable default width and height only fill missing or
@@ -139,12 +155,22 @@ ComfyUI is selected because the workflow owns the final dimensions.
 A minimal SD 1.5 API workflow used for Android end-to-end testing is available
 at [`custom/android/comfyui-workflows/sd15-basic-api.json`](./custom/android/comfyui-workflows/sd15-basic-api.json).
 
-Phase 2 workflow synchronization uses the repository-owned
+Workflow synchronization uses the repository-owned
 [`custom/comfyui-workflow-bridge`](./custom/comfyui-workflow-bridge) extension.
 It stores paired editable UI-format and executable API-format workflows inside
 ComfyUI's user-scoped storage without exposing the broad `/userdata` API. See
 the extension README for verification, host-mount/container installation,
 Ingress, upgrade, and removal instructions.
+
+### ComfyUI mobile roadmap
+
+The approved next step is a deliberately lightweight Phase 3 rather than a
+mobile clone of ComfyUI's node canvas. Planned work is limited to workflow-owned
+basic/advanced parameter forms, capability-based workflow recommendations,
+queue/progress/cancellation and recovery, reproducible generation metadata, and
+mobile-safe reference-image resizing/upload. Full node-graph editing, unlimited
+LoRA/ControlNet stacks, professional mask editing, and desktop-style batch
+debugging remain out of scope for Android.
 
 ## Download
 

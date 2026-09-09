@@ -101,6 +101,39 @@ describe('SettingsSchema ComfyUI Basic authentication', () => {
 
     expect(SettingsSchema.parse(legacy).comfyui).not.toHaveProperty('bearerToken')
   })
+
+  test('preserves paired workflow profiles and remote revisions', () => {
+    const parsed = SettingsSchema.parse({
+      ...defaultSettings(),
+      comfyui: {
+        ...defaultSettings().comfyui,
+        userId: 'artist',
+        activeWorkflowId: 'local-1',
+        workflowProfiles: [
+          {
+            id: 'local-1',
+            name: 'SD 1.5',
+            apiWorkflowJson: '{}',
+            uiWorkflowJson: '{}',
+            inputMapping: {},
+            capabilities: { textToImage: true },
+            remote: { id: '00000000-0000-4000-8000-000000000001', revision: 3 },
+            createdAt: 1,
+            updatedAt: 2,
+          },
+        ],
+      },
+    })
+
+    expect(parsed.comfyui.userId).toBe('artist')
+    expect(parsed.comfyui.workflowProfiles[0].remote?.revision).toBe(3)
+    expect(parsed.comfyui.workflowProfiles[0].capabilities).toEqual({
+      textToImage: true,
+      imageToImage: false,
+      lora: false,
+      controlNet: false,
+    })
+  })
 })
 
 describe('SettingsSchema MCP protocol mode', () => {

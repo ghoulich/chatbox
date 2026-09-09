@@ -16,6 +16,7 @@ export interface ComfyUIGenerationOptions {
   prompt: string
   negativePrompt?: string
   checkpoint?: string
+  referenceImage?: string
   aspectRatio?: string
   count?: number
   signal?: AbortSignal
@@ -71,10 +72,26 @@ export function buildComfyUIHeaders(settings: ComfyUISettings): Record<string, s
   if (username || password) {
     result.Authorization = `Basic ${encodeUtf8Base64(`${username}:${password}`)}`
   }
+  const userId = settings.userId?.trim()
+  if (userId) {
+    if (/[\r\n]/.test(userId)) throw new Error('The ComfyUI user id is invalid')
+    result['Comfy-User'] = userId
+  }
   return result
 }
 
-async function requestJson(
+export class ComfyUIRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly payload?: unknown
+  ) {
+    super(message)
+    this.name = 'ComfyUIRequestError'
+  }
+}
+
+export async function requestComfyUIJson(
   settings: ComfyUISettings,
   path: string,
   options: { method?: string; body?: unknown; signal?: AbortSignal } = {}
@@ -98,7 +115,7 @@ async function requestJson(
       options.signal
     )
     if (response.status < 200 || response.status >= 300) {
-      throw new Error(`ComfyUI returned HTTP ${response.status}`)
+      throw new ComfyUIRequestError(`ComfyUI returned HTTP ${response.status}`, response.status, response.data)
     }
     return response.data
   }
@@ -109,22 +126,41 @@ async function requestJson(
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
     signal: options.signal,
   })
-  if (!response.ok) throw new Error(`ComfyUI returned HTTP ${response.status}`)
+  if (!response.ok) {
+    const payload = await response.json().catch(() => undefined)
+    throw new ComfyUIRequestError(`ComfyUI returned HTTP ${response.status}`, response.status, payload)
+  }
   return response.status === 204 ? undefined : response.json()
 }
 
 export async function checkComfyUIConnection(settings: ComfyUISettings, signal?: AbortSignal): Promise<void> {
-  await requestJson(settings, '/system_stats', { signal })
+  await requestComfyUIJson(settings, '/system_stats', { signal })
 }
 
 export async function loadComfyUICheckpoints(settings: ComfyUISettings, signal?: AbortSignal): Promise<string[]> {
-  const payload = await requestJson(settings, '/models/checkpoints', { signal })
+  return loadComfyUIModelFolder(settings, 'checkpoints', signal)
+}
+
+async function loadComfyUIModelFolder(
+  settings: ComfyUISettings,
+  folder: 'checkpoints' | 'loras' | 'controlnet',
+  signal?: AbortSignal
+): Promise<string[]> {
+  const payload = await requestComfyUIJson(settings, `/models/${folder}`, { signal })
   const values = Array.isArray(payload)
     ? payload
-    : Array.isArray(asRecord(payload)?.checkpoints)
-      ? (asRecord(payload)?.checkpoints as unknown[])
+    : Array.isArray(asRecord(payload)?.[folder])
+      ? (asRecord(payload)?.[folder] as unknown[])
       : []
   return values.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+}
+
+export async function loadComfyUILoras(settings: ComfyUISettings, signal?: AbortSignal): Promise<string[]> {
+  return loadComfyUIModelFolder(settings, 'loras', signal)
+}
+
+export async function loadComfyUIControlNets(settings: ComfyUISettings, signal?: AbortSignal): Promise<string[]> {
+  return loadComfyUIModelFolder(settings, 'controlnet', signal)
 }
 
 export function parseComfyUIWorkflow(workflowJson: string): JsonRecord {
@@ -169,9 +205,13 @@ function autoTarget(workflow: JsonRecord, kind: keyof ComfyUISettings['inputMapp
     const input = kind === 'batchSize' ? 'batch_size' : kind
     return node ? `${node}.${input}` : undefined
   }
-  if (kind === 'seed' || kind === 'steps') {
+  if (kind === 'seed' || kind === 'steps' || kind === 'denoise') {
     const node = byClass(/KSampler/i)
     return node ? `${node}.${kind}` : undefined
+  }
+  if (kind === 'image') {
+    const node = byClass(/LoadImage/i)
+    return node ? `${node}.image` : undefined
   }
   return undefined
 }
@@ -256,6 +296,8 @@ function applyDefaultDimensions(workflow: JsonRecord, settings: ComfyUISettings)
   const widthTarget = dimensionTarget(workflow, settings.inputMapping, 'width')
   const heightTarget = dimensionTarget(workflow, settings.inputMapping, 'height')
   if (!widthTarget || !heightTarget) {
+    const classes = Object.values(workflow).map(nodeClass)
+    if (classes.some((value) => /LoadImage/i.test(value)) && classes.some((value) => /VAEEncode/i.test(value))) return
     throw new Error('The ComfyUI workflow has no recognizable width and height inputs')
   }
   const width = dimensionInput(workflow, widthTarget)
@@ -266,13 +308,22 @@ function applyDefaultDimensions(workflow: JsonRecord, settings: ComfyUISettings)
 
 export function buildComfyUIPrompt(
   settings: ComfyUISettings,
-  options: Pick<ComfyUIGenerationOptions, 'prompt' | 'negativePrompt' | 'checkpoint' | 'aspectRatio' | 'count'>
+  options: Pick<
+    ComfyUIGenerationOptions,
+    'prompt' | 'negativePrompt' | 'checkpoint' | 'referenceImage' | 'aspectRatio' | 'count'
+  >
 ): JsonRecord {
   const workflow = parseComfyUIWorkflow(settings.workflowJson)
   const mapping = settings.inputMapping
   const target = (kind: keyof typeof mapping) => mapping[kind]?.trim() || autoTarget(workflow, kind)
   applyInput(workflow, target('positivePrompt'), options.prompt, true)
   applyInput(workflow, target('negativePrompt'), options.negativePrompt ?? settings.defaultNegativePrompt ?? '')
+  const imageTarget = target('image')
+  if (imageTarget && !options.referenceImage)
+    throw new Error('The active ComfyUI workflow requires one reference image')
+  if (!imageTarget && options.referenceImage)
+    throw new Error('The active ComfyUI workflow does not accept a reference image')
+  applyInput(workflow, imageTarget, options.referenceImage)
   if (options.checkpoint && options.checkpoint !== COMFYUI_WORKFLOW_MODEL_ID) {
     applyInput(workflow, target('checkpoint'), options.checkpoint)
   }
@@ -280,6 +331,79 @@ export function buildComfyUIPrompt(
   applyInput(workflow, target('seed'), Math.floor(Math.random() * 1_000_000_000_000_000))
   applyInput(workflow, target('batchSize'), Math.max(1, Math.min(options.count ?? 1, 4)))
   return workflow
+}
+
+function dataUrlToBlob(dataUrl: string): Blob {
+  const separator = dataUrl.indexOf(',')
+  if (separator < 0) throw new Error('The reference image data is invalid')
+  const header = dataUrl.slice(0, separator)
+  const mimeType = /^data:([^;,]+)/.exec(header)?.[1] ?? 'image/png'
+  const payload = dataUrl.slice(separator + 1)
+  const bytes = header.includes(';base64')
+    ? Uint8Array.from(atob(payload), (character) => character.charCodeAt(0))
+    : new TextEncoder().encode(decodeURIComponent(payload))
+  return new Blob([bytes], { type: mimeType })
+}
+
+export async function uploadComfyUIImage(
+  settings: ComfyUISettings,
+  imageData: string,
+  signal?: AbortSignal
+): Promise<string> {
+  const blob = dataUrlToBlob(imageData)
+  const extension = blob.type === 'image/jpeg' ? 'jpg' : blob.type === 'image/webp' ? 'webp' : 'png'
+  const filename = `chatbox-${globalThis.crypto?.randomUUID?.() ?? Date.now()}.${extension}`
+  const url = `${normalizeComfyUIEndpoint(settings.endpoint)}/upload/image`
+  if (platform.type === 'mobile') {
+    const bytes = new Uint8Array(await blob.arrayBuffer())
+    let binary = ''
+    for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+      binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000))
+    }
+    const boundary = `ChatboxBoundary${Date.now().toString(36)}`
+    const response = await abortable(
+      CapacitorHttp.request({
+        url,
+        method: 'POST',
+        headers: { ...buildComfyUIHeaders(settings), 'Content-Type': `multipart/form-data; boundary=${boundary}` },
+        dataType: 'formData',
+        data: [
+          { key: 'image', value: btoa(binary), type: 'base64File', contentType: blob.type, fileName: filename },
+          { key: 'overwrite', value: 'true', type: 'string' },
+          { key: 'type', value: 'input', type: 'string' },
+        ],
+        responseType: 'json',
+        connectTimeout: 15_000,
+        readTimeout: Math.min(settings.timeoutSeconds * 1000, 120_000),
+      }),
+      signal
+    )
+    if (response.status < 200 || response.status >= 300) {
+      throw new ComfyUIRequestError(`ComfyUI returned HTTP ${response.status}`, response.status, response.data)
+    }
+    const result = asRecord(response.data)
+    if (typeof result?.name !== 'string' || !result.name) throw new Error('ComfyUI returned no uploaded image name')
+    const subfolder = typeof result.subfolder === 'string' ? result.subfolder.replace(/^\/+|\/+$/g, '') : ''
+    return subfolder ? `${subfolder}/${result.name}` : result.name
+  }
+  const form = new FormData()
+  form.append('image', blob, filename)
+  form.append('overwrite', 'true')
+  form.append('type', 'input')
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: buildComfyUIHeaders(settings),
+    body: form,
+    signal,
+  })
+  if (!response.ok) {
+    const payload = await response.json().catch(() => undefined)
+    throw new ComfyUIRequestError(`ComfyUI returned HTTP ${response.status}`, response.status, payload)
+  }
+  const result = asRecord(await response.json())
+  if (typeof result?.name !== 'string' || !result.name) throw new Error('ComfyUI returned no uploaded image name')
+  const subfolder = typeof result.subfolder === 'string' ? result.subfolder.replace(/^\/+|\/+$/g, '') : ''
+  return subfolder ? `${subfolder}/${result.name}` : result.name
 }
 
 function historyImages(payload: unknown, promptId: string, outputNodeId?: string): ComfyUIImageDescriptor[] | null {
@@ -349,9 +473,12 @@ export async function generateWithComfyUI(
 ): Promise<{ promptId: string; images: string[] }> {
   if (!settings.enabled) throw new Error('ComfyUI is disabled')
   const clientId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`
-  const workflow = buildComfyUIPrompt(settings, options)
+  const uploadedImage = options.referenceImage
+    ? await uploadComfyUIImage(settings, options.referenceImage, options.signal)
+    : undefined
+  const workflow = buildComfyUIPrompt(settings, { ...options, referenceImage: uploadedImage })
   const submission = asRecord(
-    await requestJson(settings, '/prompt', {
+    await requestComfyUIJson(settings, '/prompt', {
       method: 'POST',
       body: { prompt: workflow, client_id: clientId },
       signal: options.signal,
@@ -380,7 +507,7 @@ export async function waitForComfyUIImages(
   while (descriptors === null && Date.now() < deadline) {
     if (signal?.aborted) throw signal.reason ?? new DOMException('Aborted', 'AbortError')
     descriptors = historyImages(
-      await requestJson(settings, `/history/${encodeURIComponent(promptId)}`, { signal }),
+      await requestComfyUIJson(settings, `/history/${encodeURIComponent(promptId)}`, { signal }),
       promptId,
       settings.outputNodeId?.trim() || undefined
     )
@@ -398,13 +525,15 @@ export async function cancelComfyUIJob(
   promptId: string,
   signal?: AbortSignal
 ): Promise<void> {
-  const queue = asRecord(await requestJson(settings, '/queue', { signal }).catch(() => undefined))
+  const queue = asRecord(await requestComfyUIJson(settings, '/queue', { signal }).catch(() => undefined))
   const running = Array.isArray(queue?.queue_running) ? queue.queue_running : []
   const isRunning = running.some((entry) => Array.isArray(entry) && entry.some((value) => value === promptId))
-  await requestJson(settings, '/queue', { method: 'POST', body: { delete: [promptId] }, signal }).catch(() => undefined)
+  await requestComfyUIJson(settings, '/queue', { method: 'POST', body: { delete: [promptId] }, signal }).catch(
+    () => undefined
+  )
   // /interrupt is global to a ComfyUI instance. Only use it when this exact
   // prompt is running, so cancelling a queued Chatbox job cannot stop another client.
   if (isRunning) {
-    await requestJson(settings, '/interrupt', { method: 'POST', body: {}, signal }).catch(() => undefined)
+    await requestComfyUIJson(settings, '/interrupt', { method: 'POST', body: {}, signal }).catch(() => undefined)
   }
 }

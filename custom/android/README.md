@@ -50,22 +50,25 @@ The reproducible native overrides are kept here:
 The decoded build wrapper is intentionally kept outside this Git worktree at
 `../../../chatbox-v1.23.1-apk-build` so thousands of generated files are not mixed
 with the maintained TypeScript changes. The current signed output is
-`../../../chatbox-1.23.1-custom-v495-signed.apk` (`versionName 1.23.1.495`,
-`versionCode 495`). v495 includes the earlier Settings Store crash fix plus
+`../../../chatbox-1.23.1-custom-v497-signed.apk` (`versionName 1.23.1.497`,
+`versionCode 497`). v497 includes the earlier Settings Store crash fix plus
 Android Skills/remote MCP, media and diagram rendering, offline KaTeX,
 session-attachment inline/retrieval selection, native embedding/reranking
 requests, cross-platform automatic attachment routing, and automatic title
 generation for copilot sessions. It also adds a configurable self-hosted
 Firecrawl webpage reader, deterministic image-search routing with fallback
 media cards, modern adaptive Mermaid styling, and self-hosted ComfyUI image
-generation with Basic Auth username/password, API workflows, workflow-first
-dimensions with configurable width/height fallbacks, and a default image model.
+generation with Basic Auth username/password, `Comfy-User` support, a
+multi-workflow library, a form designer for text-to-image/image-to-image/LoRA/
+ControlNet, paired API/UI workflow generation, revision-safe Workflow Bridge
+synchronization, Android reference-image upload, workflow-first dimensions with
+configurable width/height fallbacks, and a default image model.
 Mobile attachment indexing
 additionally retries transient batch failures, saves completed batches as
 checkpoints, resumes from the first missing vector, and distinguishes indexing
 failures from parsing failures in the UI. See the local handoff outside the
 public repository and
-`../../test-evidence/mumu-v492/TEST_REPORT.md` before
+`../../test-evidence/mumu-v497/TEST_REPORT.md` before
 rebuilding.
 
 Security note: trusting a user-installed CA enables HTTPS to servers signed by
@@ -77,3 +80,8 @@ the CA that controls the intended server.
 workflow used for the v495 Android end-to-end generation check. Its standard
 nodes are auto-detected by Chatbox and its configured dimensions intentionally
 take precedence over the 1024×1024 fallback values.
+
+When rebuilding the decoded Android wrapper, use page-aware alignment
+(`zipalign -p -f 4`) before signing. Plain alignment can leave native `.so`
+libraries incorrectly page-aligned and cause installation to fail even when the
+APK signature itself is valid.

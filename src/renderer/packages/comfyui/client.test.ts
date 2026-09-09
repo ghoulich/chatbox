@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
+import type { Settings } from '@shared/types'
 import {
   buildComfyUIHeaders,
   buildComfyUIPrompt,
   inspectComfyUIWorkflowDimensions,
   normalizeComfyUIEndpoint,
   parseComfyUIWorkflow,
+  uploadComfyUIImage,
 } from './client'
 
 const settings = {
@@ -24,7 +26,8 @@ const settings = {
   timeoutSeconds: 600,
   pollIntervalMs: 1000,
   defaultNegativePrompt: 'blurry',
-} as const
+  workflowProfiles: [],
+} satisfies Settings['comfyui']
 
 describe('ComfyUI client helpers', () => {
   it('creates Basic authentication headers without exposing credentials in the endpoint', () => {
@@ -33,6 +36,15 @@ describe('ComfyUI client helpers', () => {
       Accept: 'application/json',
       Authorization: 'Basic YXJ0aXN0OnNlY3JldA==',
     })
+  })
+
+  it('adds the ComfyUI user header only when a multi-user id is configured', () => {
+    expect(buildComfyUIHeaders({ ...settings, userId: ' artist ' })).toEqual({
+      Accept: 'application/json',
+      'Comfy-User': 'artist',
+    })
+    expect(buildComfyUIHeaders({ ...settings, userId: '   ' })).toEqual({ Accept: 'application/json' })
+    expect(() => buildComfyUIHeaders({ ...settings, userId: 'artist\r\nX-Test: injected' })).toThrow('invalid')
   })
 
   it('encodes non-ASCII Basic authentication credentials as UTF-8', () => {
@@ -93,5 +105,41 @@ describe('ComfyUI client helpers', () => {
     expect(() =>
       buildComfyUIPrompt({ ...settings, workflowJson: JSON.stringify(workflowJson) }, { prompt: 'missing size' })
     ).toThrow('no recognizable width and height inputs')
+  })
+
+  it('injects an uploaded reference image and permits image-derived latent dimensions', () => {
+    const workflowJson = JSON.stringify({
+      3: { class_type: 'KSampler', inputs: { seed: 1, steps: 20, denoise: 0.75 } },
+      6: { class_type: 'CLIPTextEncode', inputs: { text: '' } },
+      7: { class_type: 'CLIPTextEncode', inputs: { text: '' } },
+      11: { class_type: 'LoadImage', inputs: { image: 'placeholder.png' } },
+      12: { class_type: 'VAEEncode', inputs: { pixels: ['11', 0] } },
+    })
+    const workflow = buildComfyUIPrompt(
+      { ...settings, workflowJson, inputMapping: { image: '11.image' } },
+      { prompt: 'restyle it', referenceImage: 'chatbox-upload.png' }
+    ) as Record<string, { inputs: Record<string, unknown> }>
+
+    expect(workflow['11'].inputs.image).toBe('chatbox-upload.png')
+    expect(() =>
+      buildComfyUIPrompt({ ...settings, workflowJson, inputMapping: { image: '11.image' } }, { prompt: 'missing' })
+    ).toThrow('requires one reference image')
+  })
+
+  it('uploads reference images with Basic authentication and returns a subfolder path', async () => {
+    vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValueOnce('00000000-0000-4000-8000-000000000002')
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify({ name: 'input.png', subfolder: 'chatbox', type: 'input' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    )
+    await expect(
+      uploadComfyUIImage({ ...settings, username: 'artist', password: 'secret' }, 'data:image/png;base64,iVBORw0KGgo=')
+    ).resolves.toBe('chatbox/input.png')
+    const request = fetchMock.mock.calls[0][1]
+    expect(request?.method).toBe('POST')
+    expect(request?.headers).toMatchObject({ Authorization: 'Basic YXJ0aXN0OnNlY3JldA==' })
+    expect(request?.body).toBeInstanceOf(FormData)
   })
 })

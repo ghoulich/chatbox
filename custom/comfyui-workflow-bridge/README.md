@@ -102,6 +102,23 @@ sends both the editable graph and executable prompt to the bridge. Normal
 ComfyUI saves that have not used this command are listed as unmanaged and need
 to be opened and synchronized before Chatbox can execute them reliably.
 
+## Use in Chatbox
+
+1. Open **Settings → ComfyUI Image Generation → Connection**, enter the same
+   endpoint and Basic Auth credentials used for ComfyUI, and run both connection
+   checks.
+2. Open **Workflow Designer** to create a text-to-image, image-to-image, optional
+   LoRA, or ControlNet workflow. Chatbox generates both the editable UI graph and
+   executable API graph.
+3. Open **Workflow Library** to choose the active workflow, synchronize local
+   changes, pull a remote revision, or delete a managed workflow from one or both
+   sides.
+
+Image-to-image and ControlNet profiles require exactly one reference image at
+generation time. If another client updates the same managed workflow first,
+Chatbox reports a revision conflict and requires a refresh/pull before another
+push. Workflows listed as unmanaged are never overwritten or deleted by Chatbox.
+
 ## Upgrade and uninstall
 
 Replace the extension directory and restart the workload to upgrade. Do not
