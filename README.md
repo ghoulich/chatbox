@@ -139,6 +139,13 @@ ComfyUI is selected because the workflow owns the final dimensions.
 A minimal SD 1.5 API workflow used for Android end-to-end testing is available
 at [`custom/android/comfyui-workflows/sd15-basic-api.json`](./custom/android/comfyui-workflows/sd15-basic-api.json).
 
+Phase 2 workflow synchronization uses the repository-owned
+[`custom/comfyui-workflow-bridge`](./custom/comfyui-workflow-bridge) extension.
+It stores paired editable UI-format and executable API-format workflows inside
+ComfyUI's user-scoped storage without exposing the broad `/userdata` API. See
+the extension README for verification, host-mount/container installation,
+Ingress, upgrade, and removal instructions.
+
 ## Download
 
 ### Desktop

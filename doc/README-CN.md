@@ -69,6 +69,12 @@
 Android 端到端测试使用的最小 SD 1.5 API 工作流见
 [`custom/android/comfyui-workflows/sd15-basic-api.json`](../custom/android/comfyui-workflows/sd15-basic-api.json)。
 
+第二阶段的工作流同步桥接器位于
+[`custom/comfyui-workflow-bridge`](../custom/comfyui-workflow-bridge)。它在 ComfyUI
+的用户隔离目录中成对保存可编辑 UI-format 和可执行 API-format，无需向公网开放
+范围更大的 `/userdata` 接口；构建校验、宿主机挂载/K8S 安装、Ingress、升级和
+卸载方式见扩展目录内的 README。
+
 ### 下载电脑端
 
 <table style="width: 100%">
