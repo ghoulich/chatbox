@@ -1538,6 +1538,7 @@
   "The current ComfyUI integration supports text-to-image workflows only.": "현재 ComfyUI 연동은 텍스트-이미지 워크플로만 지원합니다.",
   "API workflow only": "API 워크플로만",
   "Active Workflow": "활성 워크플로",
+  "Sampling Steps": "샘플링 단계",
   "CFG Scale": "CFG 스케일",
   "Check Workflow Bridge": "Workflow Bridge 확인",
   "Check the connection first to load checkpoint models.": "체크포인트 모델을 불러오려면 먼저 연결을 확인하세요.",
@@ -1603,5 +1604,16 @@
   "End Percent": "종료 비율",
   "ComfyUI workflows currently accept only one reference image.": "ComfyUI 워크플로는 현재 참조 이미지를 한 장만 허용합니다.",
   "The active ComfyUI workflow does not accept a reference image.": "활성 ComfyUI 워크플로는 참조 이미지를 받지 않습니다.",
-  "The active ComfyUI workflow requires one reference image.": "활성 ComfyUI 워크플로에는 참조 이미지 한 장이 필요합니다."
+  "The active ComfyUI workflow requires one reference image.": "활성 ComfyUI 워크플로에는 참조 이미지 한 장이 필요합니다.",
+  "Generation Parameters": "생성 매개변수",
+  "Reset to Workflow Defaults": "워크플로 기본값으로 재설정",
+  "Recommended workflow: {{name}}": "추천 워크플로: {{name}}",
+  "Switch Workflow": "워크플로 전환",
+  "Generation cancelled": "생성이 취소되었습니다",
+  "Queue position: {{position}}": "대기열 위치: {{position}}",
+  "Reuse Settings": "설정 재사용",
+  "Unable to prepare reference image.": "참조 이미지를 처리할 수 없습니다.",
+  "Reference image optimized to {{width}} × {{height}}.": "참조 이미지가 {{width}} × {{height}} 크기로 최적화되었습니다.",
+  "The saved ComfyUI workflow is no longer available.": "저장된 ComfyUI 워크플로를 더 이상 사용할 수 없습니다.",
+  "Missing ComfyUI model: {{name}}": "ComfyUI 모델 누락: {{name}}"
 }

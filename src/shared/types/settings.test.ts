@@ -134,6 +134,36 @@ describe('SettingsSchema ComfyUI Basic authentication', () => {
       controlNet: false,
     })
   })
+
+  test('preserves Phase 3 workflow-owned runtime parameter mappings', () => {
+    const parsed = SettingsSchema.parse({
+      ...defaultSettings(),
+      comfyui: {
+        ...defaultSettings().comfyui,
+        inputMapping: {
+          cfg: '3.cfg',
+          sampler: '3.sampler_name',
+          scheduler: '3.scheduler',
+          loraStrengthModel: '10.strength_model',
+          loraStrengthClip: '10.strength_clip',
+          controlNetStrength: '13.strength',
+          controlNetStart: '13.start_percent',
+          controlNetEnd: '13.end_percent',
+        },
+      },
+    })
+
+    expect(parsed.comfyui.inputMapping).toMatchObject({
+      cfg: '3.cfg',
+      sampler: '3.sampler_name',
+      scheduler: '3.scheduler',
+      loraStrengthModel: '10.strength_model',
+      loraStrengthClip: '10.strength_clip',
+      controlNetStrength: '13.strength',
+      controlNetStart: '13.start_percent',
+      controlNetEnd: '13.end_percent',
+    })
+  })
 })
 
 describe('SettingsSchema MCP protocol mode', () => {

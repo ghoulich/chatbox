@@ -1,6 +1,7 @@
 import NiceModal from '@ebay/nice-modal-react'
 import {
   ActionIcon,
+  Alert,
   Box,
   Button,
   Flex,
@@ -12,10 +13,16 @@ import {
   Textarea,
   UnstyledButton,
 } from '@mantine/core'
-import type { ImageGeneration, ImageGenerationModel } from '@shared/types'
+import type {
+  ComfyUIReferenceProcessing,
+  ComfyUIRuntimeParameters,
+  ImageGeneration,
+  ImageGenerationModel,
+} from '@shared/types'
 import { ModelProviderEnum } from '@shared/types'
 import {
   IconArrowUp,
+  IconAdjustmentsHorizontal,
   IconAspectRatio,
   IconChevronRight,
   IconHistory,
@@ -37,6 +44,9 @@ import useVersion from '@/hooks/useVersion'
 import { getLogger } from '@/lib/utils'
 import { resumeImageGenerationWithFollowUp } from '@/packages/chatbox-cli/image-task-follow-up'
 import { COMFYUI_IMAGE_PROVIDER_ID } from '@/packages/comfyui/constants'
+import { prepareComfyUIMobileReference } from '@/packages/comfyui/image-preprocess'
+import { activateWorkflow, getComfyUIRuntimeDefaults, recommendComfyUIWorkflow } from '@/packages/comfyui/workflows'
+import platform from '@/platform'
 import storage from '@/storage'
 import { StorageKeyGenerator } from '@/storage/StoreStorage'
 import { useAuthInfoStore } from '@/stores/authInfoStore'
@@ -62,6 +72,8 @@ import {
   MAX_REFERENCE_IMAGES,
 } from './-components/constants'
 import { EmptyState } from './-components/EmptyState'
+import { ComfyUIProgressCard } from './-components/ComfyUIProgressCard'
+import { ComfyUIRuntimePanel } from './-components/ComfyUIRuntimePanel'
 import { GeneratedImagesGallery } from './-components/GeneratedImagesGallery'
 import { HistoryPanel } from './-components/HistoryPanel'
 import { ImageGenerationErrorTips } from './-components/ImageGenerationErrorTips'
@@ -74,6 +86,15 @@ import { LoadingShimmer } from './-components/Shimmer'
 const log = getLogger('image-creator')
 function getRatioOptions(provider: string, model: string): string[] {
   return provider === COMFYUI_IMAGE_PROVIDER_ID ? ['auto'] : getRatioOptionsForModel(model)
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result))
+    reader.onerror = () => reject(reader.error ?? new Error('Unable to read image file'))
+    reader.readAsDataURL(file)
+  })
 }
 
 export const Route = createFileRoute('/image-creator/')({
@@ -97,6 +118,9 @@ interface InputToolbarProps {
   onModelSelect: (provider: string, model: string) => void
   onAddReference: () => void
   onNewCreation: () => void
+  showGenerationParameters: boolean
+  workflowName?: string
+  onGenerationParametersOpen: () => void
 }
 
 function InputToolbar({
@@ -112,6 +136,9 @@ function InputToolbar({
   onModelSelect,
   onAddReference,
   onNewCreation,
+  showGenerationParameters,
+  workflowName,
+  onGenerationParametersOpen,
 }: InputToolbarProps) {
   const { t } = useTranslation()
 
@@ -189,6 +216,18 @@ function InputToolbar({
             {t('Upload')}
           </Text>
         </UnstyledButton>
+
+        {showGenerationParameters && (
+          <UnstyledButton
+            onClick={onGenerationParametersOpen}
+            className="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-[var(--chatbox-background-tertiary)] transition-colors"
+          >
+            <IconAdjustmentsHorizontal size={16} className="text-[var(--chatbox-tint-secondary)]" />
+            <Text size="sm" className="text-[var(--chatbox-tint-secondary)] max-w-[120px] truncate">
+              {workflowName || t('Generation Parameters')}
+            </Text>
+          </UnstyledButton>
+        )}
       </Flex>
 
       {/* Right Group: New Creation */}
@@ -225,6 +264,8 @@ function ImageCreatorPage() {
   const { providers } = useProviders()
   const imageModelGroups = useImageModelGroups()
   const defaultImageModel = useSettingsStore((s) => s.defaultImageModel)
+  const comfyui = useSettingsStore((s) => s.comfyui)
+  const setSettings = useSettingsStore((s) => s.setSettings)
   const hasLicense = useSettingsStore((s) => Boolean(s.licenseKey))
   const hasExpiredLicense = useSettingsStore((s) => s.hasExpiredLicense)
   const isLoggedIn = useAuthInfoStore((s) => Boolean(s.accessToken && s.refreshToken))
@@ -243,7 +284,12 @@ function ImageCreatorPage() {
 
   const [prompt, setPrompt] = useState('')
   const [referenceImages, setReferenceImages] = useState<
-    { storageKey: string; sourceRecordId?: string; isTempUpload?: boolean }[]
+    {
+      storageKey: string
+      sourceRecordId?: string
+      isTempUpload?: boolean
+      processing?: ComfyUIReferenceProcessing
+    }[]
   >([])
   const referenceImagesRef = useRef(referenceImages)
   referenceImagesRef.current = referenceImages
@@ -263,6 +309,21 @@ function ImageCreatorPage() {
   const [selectedRatio, setSelectedRatio] = useState<string>('auto')
   const [showModelDrawer, setShowModelDrawer] = useState(false)
   const [showRatioDrawer, setShowRatioDrawer] = useState(false)
+  const [showComfyUIRuntime, setShowComfyUIRuntime] = useState(false)
+  const activeComfyUIProfile = useMemo(
+    () => comfyui.workflowProfiles.find((item) => item.id === comfyui.activeWorkflowId),
+    [comfyui.workflowProfiles, comfyui.activeWorkflowId]
+  )
+  const [comfyuiRuntimeParameters, setComfyUIRuntimeParameters] = useState<ComfyUIRuntimeParameters>(() =>
+    getComfyUIRuntimeDefaults(activeComfyUIProfile)
+  )
+  const runtimeWorkflowIdRef = useRef(comfyui.activeWorkflowId)
+
+  useEffect(() => {
+    if (runtimeWorkflowIdRef.current === comfyui.activeWorkflowId) return
+    runtimeWorkflowIdRef.current = comfyui.activeWorkflowId
+    setComfyUIRuntimeParameters(getComfyUIRuntimeDefaults(activeComfyUIProfile))
+  }, [activeComfyUIProfile, comfyui.activeWorkflowId])
 
   // Get ratio options based on selected model
   const ratioOptions = getRatioOptions(selectedProvider, selectedModel)
@@ -282,11 +343,37 @@ function ImageCreatorPage() {
   const historyCache = useMemo(() => {
     return historyData?.pages.flatMap((page) => page.items) ?? []
   }, [historyData])
+  const autoResumeAttemptedRef = useRef<Set<string>>(new Set())
 
   const isCurrentlyGenerating = currentGeneratingId !== null
+  const recommendedComfyUIProfile = useMemo(
+    () =>
+      selectedProvider === COMFYUI_IMAGE_PROVIDER_ID
+        ? recommendComfyUIWorkflow(comfyui.workflowProfiles, referenceImages.length, comfyui.activeWorkflowId)
+        : undefined,
+    [selectedProvider, comfyui.workflowProfiles, comfyui.activeWorkflowId, referenceImages.length]
+  )
+  const shouldRecommendWorkflow = Boolean(
+    recommendedComfyUIProfile && recommendedComfyUIProfile.id !== comfyui.activeWorkflowId
+  )
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  useEffect(() => {
+    if (currentGeneratingId) return
+    const recoverable = historyCache.find(
+      (record) =>
+        record.model.provider === COMFYUI_IMAGE_PROVIDER_ID &&
+        record.status === 'generating' &&
+        Boolean(record.taskId) &&
+        !autoResumeAttemptedRef.current.has(record.id)
+    )
+    if (!recoverable) return
+    autoResumeAttemptedRef.current.add(recoverable.id)
+    imageGenerationStore.getState().setCurrentRecordId(recoverable.id)
+    void resumeImageGenerationWithFollowUp(recoverable.id)
+  }, [currentGeneratingId, historyCache])
 
   const cleanupTempUploads = useCallback(async () => {
     const keys = Array.from(tempUploadKeysRef.current)
@@ -339,41 +426,49 @@ function ImageCreatorPage() {
     setSelectedRatio((prev) => (newRatioOptions.includes(prev) ? prev : 'auto'))
   }, [])
 
-  const handleImageUpload = useCallback((files: FileList | null) => {
-    if (!files || files.length === 0) return
+  const handleImageUpload = useCallback(
+    (files: FileList | null) => {
+      if (!files || files.length === 0) return
 
-    let available = MAX_REFERENCE_IMAGES - referenceImagesRef.current.length
-    if (available <= 0) return
+      let available = MAX_REFERENCE_IMAGES - referenceImagesRef.current.length
+      if (available <= 0) return
 
-    for (const file of Array.from(files)) {
-      if (!file.type.startsWith('image/')) continue
-      if (available <= 0) break
-      available--
+      for (const file of Array.from(files)) {
+        if (!file.type.startsWith('image/')) continue
+        if (available <= 0) break
+        available--
 
-      const reader = new FileReader()
-      reader.onload = async (e) => {
-        const dataUrl = e.target?.result as string
-        const storageKey = StorageKeyGenerator.picture('image-creator-ref')
-        try {
-          await storage.setBlob(storageKey, dataUrl)
-        } catch (err) {
-          log.error('Failed to store uploaded reference image:', err)
-          return
-        }
-        // Prime blob cache so preview doesn't need to refetch immediately.
-        queryClient.setQueryData(['blob', storageKey], dataUrl)
-        tempUploadKeysRef.current.add(storageKey)
-        setReferenceImages((prev) => {
-          if (prev.length >= MAX_REFERENCE_IMAGES) return prev
-          return [...prev, { storageKey, isTempUpload: true }]
-        })
+        void (async () => {
+          try {
+            const prepared =
+              selectedProvider === COMFYUI_IMAGE_PROVIDER_ID && platform.type === 'mobile'
+                ? await prepareComfyUIMobileReference(file)
+                : { dataUrl: await readFileAsDataUrl(file), processing: undefined }
+            const storageKey = StorageKeyGenerator.picture('image-creator-ref')
+            await storage.setBlob(storageKey, prepared.dataUrl)
+            queryClient.setQueryData(['blob', storageKey], prepared.dataUrl)
+            tempUploadKeysRef.current.add(storageKey)
+            setReferenceImages((prev) => {
+              if (prev.length >= MAX_REFERENCE_IMAGES) return prev
+              return [...prev, { storageKey, isTempUpload: true, processing: prepared.processing }]
+            })
+            if (prepared.processing?.resized) {
+              toastActions.add(
+                t('Reference image optimized to {{width}} × {{height}}.', {
+                  width: prepared.processing.width,
+                  height: prepared.processing.height,
+                })
+              )
+            }
+          } catch (error) {
+            log.error('Failed to prepare uploaded reference image:', file.name, error)
+            toastActions.add(t('Unable to prepare reference image.'))
+          }
+        })()
       }
-      reader.onerror = () => {
-        log.error('Failed to read image file:', file.name)
-      }
-      reader.readAsDataURL(file)
-    }
-  }, [])
+    },
+    [selectedProvider, t]
+  )
 
   const handleRemoveReferenceImage = useCallback((storageKey: string) => {
     const current = referenceImagesRef.current.find((img) => img.storageKey === storageKey)
@@ -383,6 +478,17 @@ function ImageCreatorPage() {
       void storage.delBlob(storageKey).catch((e) => log.error('Failed to delete temp reference image blob:', e))
     }
   }, [])
+
+  const handleComfyUIWorkflowChange = useCallback(
+    (workflowId: string) => {
+      const nextProfile = comfyui.workflowProfiles.find((item) => item.id === workflowId)
+      if (!nextProfile) return
+      setSettings({ comfyui: activateWorkflow(comfyui, workflowId) })
+      runtimeWorkflowIdRef.current = workflowId
+      setComfyUIRuntimeParameters(getComfyUIRuntimeDefaults(nextProfile))
+    },
+    [comfyui, setSettings]
+  )
 
   const handleSubmit = useCallback(async () => {
     if (!prompt.trim() || isCurrentlyGenerating) return
@@ -428,6 +534,16 @@ function ImageCreatorPage() {
         imageGenerateNum: 1,
         aspectRatio: selectedRatio,
         parentIds: parentIds.length > 0 ? parentIds : undefined,
+        comfyui:
+          selectedProvider === COMFYUI_IMAGE_PROVIDER_ID && activeComfyUIProfile
+            ? {
+                workflowId: activeComfyUIProfile.id,
+                workflowName: activeComfyUIProfile.name,
+                workflowRevision: activeComfyUIProfile.remote?.revision,
+                parameters: comfyuiRuntimeParameters,
+                referenceProcessing: referenceImages[0]?.processing,
+              }
+            : undefined,
       })
 
       // Temp uploads are now "owned" by the created record; don't delete them on page leave.
@@ -437,7 +553,17 @@ function ImageCreatorPage() {
     } catch (error) {
       log.error('Failed to generate image:', error)
     }
-  }, [prompt, referenceImages, selectedProvider, selectedModel, selectedRatio, isCurrentlyGenerating, t])
+  }, [
+    prompt,
+    referenceImages,
+    selectedProvider,
+    selectedModel,
+    selectedRatio,
+    isCurrentlyGenerating,
+    activeComfyUIProfile,
+    comfyuiRuntimeParameters,
+    t,
+  ])
 
   const handleQuickPromptSubmit = useCallback(
     async (quickPrompt: string) => {
@@ -462,12 +588,21 @@ function ImageCreatorPage() {
           },
           imageGenerateNum: 1,
           aspectRatio: 'auto',
+          comfyui:
+            selectedProvider === COMFYUI_IMAGE_PROVIDER_ID && activeComfyUIProfile
+              ? {
+                  workflowId: activeComfyUIProfile.id,
+                  workflowName: activeComfyUIProfile.name,
+                  workflowRevision: activeComfyUIProfile.remote?.revision,
+                  parameters: comfyuiRuntimeParameters,
+                }
+              : undefined,
         })
       } catch (error) {
         log.error('Failed to generate image:', error)
       }
     },
-    [selectedProvider, selectedModel, isCurrentlyGenerating, t]
+    [selectedProvider, selectedModel, isCurrentlyGenerating, activeComfyUIProfile, comfyuiRuntimeParameters, t]
   )
 
   const handleUseAsReference = useCallback((storageKey: string, sourceRecordId?: string) => {
@@ -496,10 +631,29 @@ function ImageCreatorPage() {
       await cleanupTempUploads()
       imageGenerationStore.getState().setCurrentRecordId(record.id)
       setPrompt(record.prompt)
-
+      setSelectedProvider(record.model.provider)
+      setSelectedModel(record.model.modelId)
+      lastUsedModelStore.getState().setPictureModel(record.model.provider, record.model.modelId)
+      if (record.comfyuiMetadata) {
+        const storedProfile = comfyui.workflowProfiles.find((item) => item.id === record.comfyuiMetadata?.workflowId)
+        if (storedProfile) {
+          setSettings({ comfyui: activateWorkflow(comfyui, storedProfile.id) })
+          runtimeWorkflowIdRef.current = storedProfile.id
+        }
+        setComfyUIRuntimeParameters(record.comfyuiMetadata.parameters)
+      }
       setReferenceImages(record.referenceImages.map((key) => ({ storageKey: key, isTempUpload: false })))
     },
-    [cleanupTempUploads]
+    [cleanupTempUploads, comfyui, setSettings]
+  )
+
+  const handleReuseSettings = useCallback(
+    async (record: ImageGeneration) => {
+      await handleHistoryClick(record)
+      imageGenerationStore.getState().setCurrentRecordId(null)
+      textareaRef.current?.focus()
+    },
+    [handleHistoryClick]
   )
 
   const handleNewCreation = useCallback(() => {
@@ -607,6 +761,11 @@ function ImageCreatorPage() {
                     <LoadingShimmer />
                   )}
 
+                  {currentRecord.progress &&
+                    (currentRecord.status === 'generating' || currentRecord.progress.stage === 'cancelled') && (
+                      <ComfyUIProgressCard progress={currentRecord.progress} />
+                    )}
+
                   {currentRecord.generatedImages.length > 0 && (
                     <Flex justify="center" w="100%">
                       <GeneratedImagesGallery
@@ -621,6 +780,8 @@ function ImageCreatorPage() {
                     prompt={currentRecord.prompt}
                     modelDisplayName={getImageModelDisplayName(currentRecord.model)}
                     referenceImageCount={currentRecord.referenceImages.length}
+                    workflowName={currentRecord.comfyuiMetadata?.workflowName}
+                    onReuseSettings={() => void handleReuseSettings(currentRecord)}
                   />
 
                   {currentRecord.status === 'generating' && currentRecord.taskId && !isCurrentlyGenerating && (
@@ -631,7 +792,7 @@ function ImageCreatorPage() {
                     </Flex>
                   )}
 
-                  {currentRecord.status === 'error' && (
+                  {currentRecord.status === 'error' && currentRecord.progress?.stage !== 'cancelled' && (
                     <ImageGenerationErrorTips
                       record={currentRecord}
                       onRetry={() => void retryGeneration(currentRecord.id)}
@@ -655,6 +816,23 @@ function ImageCreatorPage() {
                 onRemove={handleRemoveReferenceImage}
                 onAddClick={() => fileInputRef.current?.click()}
               />
+
+              {shouldRecommendWorkflow && recommendedComfyUIProfile && (
+                <Alert color="blue" radius="lg">
+                  <Flex align="center" justify="space-between" gap="sm">
+                    <Text size="sm">
+                      {t('Recommended workflow: {{name}}', { name: recommendedComfyUIProfile.name })}
+                    </Text>
+                    <Button
+                      size="compact-sm"
+                      variant="light"
+                      onClick={() => handleComfyUIWorkflowChange(recommendedComfyUIProfile.id)}
+                    >
+                      {t('Switch Workflow')}
+                    </Button>
+                  </Flex>
+                </Alert>
+              )}
 
               <input
                 ref={fileInputRef}
@@ -735,6 +913,9 @@ function ImageCreatorPage() {
                     onModelSelect={handleModelSelect}
                     onAddReference={() => fileInputRef.current?.click()}
                     onNewCreation={handleNewCreation}
+                    showGenerationParameters={selectedProvider === COMFYUI_IMAGE_PROVIDER_ID}
+                    workflowName={activeComfyUIProfile?.name}
+                    onGenerationParametersOpen={() => setShowComfyUIRuntime(true)}
                   />
                 </Stack>
               </Box>
@@ -801,6 +982,16 @@ function ImageCreatorPage() {
             />
           </>
         )}
+        <ComfyUIRuntimePanel
+          opened={showComfyUIRuntime}
+          profiles={comfyui.workflowProfiles}
+          activeWorkflowId={comfyui.activeWorkflowId}
+          parameters={comfyuiRuntimeParameters}
+          onClose={() => setShowComfyUIRuntime(false)}
+          onWorkflowChange={handleComfyUIWorkflowChange}
+          onParametersChange={setComfyUIRuntimeParameters}
+          onReset={() => setComfyUIRuntimeParameters(getComfyUIRuntimeDefaults(activeComfyUIProfile))}
+        />
       </Flex>
     </Page>
   )

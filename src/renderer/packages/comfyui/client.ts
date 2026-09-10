@@ -1,5 +1,5 @@
 import { CapacitorHttp } from '@capacitor/core'
-import type { Settings } from '@shared/types'
+import type { ComfyUIRuntimeParameters, ImageGenerationProgress, Settings } from '@shared/types'
 import platform from '@/platform'
 import { COMFYUI_WORKFLOW_MODEL_ID } from './constants'
 
@@ -19,8 +19,10 @@ export interface ComfyUIGenerationOptions {
   referenceImage?: string
   aspectRatio?: string
   count?: number
+  runtimeParameters?: ComfyUIRuntimeParameters
   signal?: AbortSignal
   onSubmitted?: (promptId: string) => void
+  onProgress?: (progress: Omit<ImageGenerationProgress, 'updatedAt'>) => void
 }
 
 function asRecord(value: unknown): JsonRecord | undefined {
@@ -163,6 +165,46 @@ export async function loadComfyUIControlNets(settings: ComfyUISettings, signal?:
   return loadComfyUIModelFolder(settings, 'controlnet', signal)
 }
 
+export interface ComfyUIModelRequirements {
+  checkpoint?: string
+  lora?: string
+  controlNet?: string
+}
+
+function includesComfyUIModel(models: string[], required: string): boolean {
+  const normalized = required.replace(/\\/g, '/').toLocaleLowerCase()
+  return models.some((model) => model.replace(/\\/g, '/').toLocaleLowerCase() === normalized)
+}
+
+/** Checks only models explicitly referenced by the selected workflow before it enters the queue. */
+export async function validateComfyUIModels(
+  settings: ComfyUISettings,
+  requirements: ComfyUIModelRequirements,
+  signal?: AbortSignal
+): Promise<string[]> {
+  const checks: Array<Promise<{ required: string; models: string[] }>> = []
+  if (requirements.checkpoint && requirements.checkpoint !== COMFYUI_WORKFLOW_MODEL_ID) {
+    checks.push(
+      loadComfyUICheckpoints(settings, signal).then((models) => ({
+        required: requirements.checkpoint!,
+        models,
+      }))
+    )
+  }
+  if (requirements.lora) {
+    checks.push(loadComfyUILoras(settings, signal).then((models) => ({ required: requirements.lora!, models })))
+  }
+  if (requirements.controlNet) {
+    checks.push(
+      loadComfyUIControlNets(settings, signal).then((models) => ({ required: requirements.controlNet!, models }))
+    )
+  }
+  const results = await Promise.all(checks)
+  return results
+    .filter(({ required, models }) => !includesComfyUIModel(models, required))
+    .map(({ required }) => required)
+}
+
 export function parseComfyUIWorkflow(workflowJson: string): JsonRecord {
   let parsed: unknown
   try {
@@ -205,13 +247,27 @@ function autoTarget(workflow: JsonRecord, kind: keyof ComfyUISettings['inputMapp
     const input = kind === 'batchSize' ? 'batch_size' : kind
     return node ? `${node}.${input}` : undefined
   }
-  if (kind === 'seed' || kind === 'steps' || kind === 'denoise') {
+  if (kind === 'seed' || kind === 'steps' || kind === 'cfg' || kind === 'denoise') {
     const node = byClass(/KSampler/i)
     return node ? `${node}.${kind}` : undefined
+  }
+  if (kind === 'sampler' || kind === 'scheduler') {
+    const node = byClass(/KSampler/i)
+    return node ? `${node}.${kind === 'sampler' ? 'sampler_name' : 'scheduler'}` : undefined
   }
   if (kind === 'image') {
     const node = byClass(/LoadImage/i)
     return node ? `${node}.image` : undefined
+  }
+  if (kind === 'loraStrengthModel' || kind === 'loraStrengthClip') {
+    const node = byClass(/LoraLoader/i)
+    return node ? `${node}.${kind === 'loraStrengthModel' ? 'strength_model' : 'strength_clip'}` : undefined
+  }
+  if (kind === 'controlNetStrength' || kind === 'controlNetStart' || kind === 'controlNetEnd') {
+    const node = byClass(/ControlNetApply/i)
+    const input =
+      kind === 'controlNetStrength' ? 'strength' : kind === 'controlNetStart' ? 'start_percent' : 'end_percent'
+    return node ? `${node}.${input}` : undefined
   }
   return undefined
 }
@@ -310,7 +366,7 @@ export function buildComfyUIPrompt(
   settings: ComfyUISettings,
   options: Pick<
     ComfyUIGenerationOptions,
-    'prompt' | 'negativePrompt' | 'checkpoint' | 'referenceImage' | 'aspectRatio' | 'count'
+    'prompt' | 'negativePrompt' | 'checkpoint' | 'referenceImage' | 'aspectRatio' | 'count' | 'runtimeParameters'
   >
 ): JsonRecord {
   const workflow = parseComfyUIWorkflow(settings.workflowJson)
@@ -328,7 +384,22 @@ export function buildComfyUIPrompt(
     applyInput(workflow, target('checkpoint'), options.checkpoint)
   }
   applyDefaultDimensions(workflow, settings)
-  applyInput(workflow, target('seed'), Math.floor(Math.random() * 1_000_000_000_000_000))
+  const runtime = options.runtimeParameters ?? {}
+  applyInput(workflow, target('width'), runtime.width)
+  applyInput(workflow, target('height'), runtime.height)
+  applyInput(workflow, target('steps'), runtime.steps)
+  applyInput(workflow, target('cfg'), runtime.cfg)
+  applyInput(workflow, target('sampler'), runtime.sampler)
+  applyInput(workflow, target('scheduler'), runtime.scheduler)
+  applyInput(workflow, target('denoise'), runtime.denoise)
+  applyInput(workflow, target('loraStrengthModel'), runtime.loraStrength)
+  applyInput(workflow, target('loraStrengthClip'), runtime.loraStrength)
+  applyInput(workflow, target('controlNetStrength'), runtime.controlNetStrength)
+  applyInput(workflow, target('controlNetStart'), runtime.controlNetStart)
+  applyInput(workflow, target('controlNetEnd'), runtime.controlNetEnd)
+  const seed =
+    runtime.seed !== undefined && runtime.seed >= 0 ? runtime.seed : Math.floor(Math.random() * 1_000_000_000_000_000)
+  applyInput(workflow, target('seed'), seed)
   applyInput(workflow, target('batchSize'), Math.max(1, Math.min(options.count ?? 1, 4)))
   return workflow
 }
@@ -470,13 +541,28 @@ async function downloadImage(
 export async function generateWithComfyUI(
   settings: ComfyUISettings,
   options: ComfyUIGenerationOptions
-): Promise<{ promptId: string; images: string[] }> {
+): Promise<{ promptId: string; images: string[]; parameters: ComfyUIRuntimeParameters }> {
   if (!settings.enabled) throw new Error('ComfyUI is disabled')
   const clientId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`
+  options.onProgress?.({ stage: 'preparing', percent: 0 })
   const uploadedImage = options.referenceImage
-    ? await uploadComfyUIImage(settings, options.referenceImage, options.signal)
+    ? await (async () => {
+        options.onProgress?.({ stage: 'uploading', percent: 5 })
+        return uploadComfyUIImage(settings, options.referenceImage!, options.signal)
+      })()
     : undefined
-  const workflow = buildComfyUIPrompt(settings, { ...options, referenceImage: uploadedImage })
+  const parameters: ComfyUIRuntimeParameters = {
+    ...options.runtimeParameters,
+    seed:
+      options.runtimeParameters?.seed !== undefined && options.runtimeParameters.seed >= 0
+        ? Math.floor(options.runtimeParameters.seed)
+        : Math.floor(Math.random() * 1_000_000_000_000_000),
+  }
+  const workflow = buildComfyUIPrompt(settings, {
+    ...options,
+    runtimeParameters: parameters,
+    referenceImage: uploadedImage,
+  })
   const submission = asRecord(
     await requestComfyUIJson(settings, '/prompt', {
       method: 'POST',
@@ -492,15 +578,18 @@ export async function generateWithComfyUI(
     )
   }
   options.onSubmitted?.(promptId)
+  options.onProgress?.({ stage: 'queued', percent: 10 })
 
-  const images = await waitForComfyUIImages(settings, promptId, options.signal)
-  return { promptId, images }
+  const images = await waitForComfyUIImages(settings, promptId, options.signal, options.onProgress)
+  options.onProgress?.({ stage: 'completed', percent: 100 })
+  return { promptId, images, parameters }
 }
 
 export async function waitForComfyUIImages(
   settings: ComfyUISettings,
   promptId: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  onProgress?: ComfyUIGenerationOptions['onProgress']
 ): Promise<string[]> {
   const deadline = Date.now() + settings.timeoutSeconds * 1000
   let descriptors: ComfyUIImageDescriptor[] | null = null
@@ -512,11 +601,27 @@ export async function waitForComfyUIImages(
       settings.outputNodeId?.trim() || undefined
     )
     if (descriptors === null) {
+      const queue = asRecord(await requestComfyUIJson(settings, '/queue', { signal }).catch(() => undefined))
+      const running = Array.isArray(queue?.queue_running) ? queue.queue_running : []
+      const pending = Array.isArray(queue?.queue_pending) ? queue.queue_pending : []
+      if (running.some((entry) => Array.isArray(entry) && entry.some((value) => value === promptId))) {
+        onProgress?.({ stage: 'running', percent: 35 })
+      } else {
+        const pendingIndex = pending.findIndex(
+          (entry) => Array.isArray(entry) && entry.some((value) => value === promptId)
+        )
+        onProgress?.({
+          stage: 'queued',
+          percent: 10,
+          ...(pendingIndex >= 0 ? { queuePosition: pendingIndex + 1 } : {}),
+        })
+      }
       await abortable(new Promise((resolve) => setTimeout(resolve, settings.pollIntervalMs)), signal)
     }
   }
   if (descriptors === null) throw new Error(`ComfyUI timed out after ${settings.timeoutSeconds} seconds`)
   if (descriptors.length === 0) throw new Error('ComfyUI completed without returning an image')
+  onProgress?.({ stage: 'downloading', percent: 90 })
   return Promise.all(descriptors.map((image) => downloadImage(settings, image, signal)))
 }
 

@@ -1538,6 +1538,7 @@
   "The current ComfyUI integration supports text-to-image workflows only.": "يدعم تكامل ComfyUI الحالي مهام سير العمل من النص إلى الصورة فقط.",
   "API workflow only": "سير عمل API فقط",
   "Active Workflow": "سير العمل النشط",
+  "Sampling Steps": "خطوات أخذ العينات",
   "CFG Scale": "مقياس CFG",
   "Check Workflow Bridge": "فحص جسر سير العمل",
   "Check the connection first to load checkpoint models.": "افحص الاتصال أولًا لتحميل نماذج نقاط التحقق.",
@@ -1603,5 +1604,16 @@
   "End Percent": "نسبة النهاية",
   "ComfyUI workflows currently accept only one reference image.": "تقبل مسارات عمل ComfyUI حاليًا صورة مرجعية واحدة فقط.",
   "The active ComfyUI workflow does not accept a reference image.": "لا يقبل سير عمل ComfyUI النشط صورة مرجعية.",
-  "The active ComfyUI workflow requires one reference image.": "يتطلب سير عمل ComfyUI النشط صورة مرجعية واحدة."
+  "The active ComfyUI workflow requires one reference image.": "يتطلب سير عمل ComfyUI النشط صورة مرجعية واحدة.",
+  "Generation Parameters": "معلمات التوليد",
+  "Reset to Workflow Defaults": "إعادة الضبط إلى قيم سير العمل الافتراضية",
+  "Recommended workflow: {{name}}": "سير العمل الموصى به: {{name}}",
+  "Switch Workflow": "تبديل سير العمل",
+  "Generation cancelled": "تم إلغاء التوليد",
+  "Queue position: {{position}}": "الموضع في قائمة الانتظار: {{position}}",
+  "Reuse Settings": "إعادة استخدام الإعدادات",
+  "Unable to prepare reference image.": "تعذر تجهيز الصورة المرجعية.",
+  "Reference image optimized to {{width}} × {{height}}.": "تم تحسين الصورة المرجعية إلى {{width}} × {{height}}.",
+  "The saved ComfyUI workflow is no longer available.": "لم يعد سير عمل ComfyUI المحفوظ متاحًا.",
+  "Missing ComfyUI model: {{name}}": "نموذج ComfyUI مفقود: {{name}}"
 }

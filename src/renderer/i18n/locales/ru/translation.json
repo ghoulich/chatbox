@@ -1538,6 +1538,7 @@
   "The current ComfyUI integration supports text-to-image workflows only.": "Текущая интеграция ComfyUI поддерживает только процессы преобразования текста в изображение.",
   "API workflow only": "Только API-процесс",
   "Active Workflow": "Активный процесс",
+  "Sampling Steps": "Шаги сэмплирования",
   "CFG Scale": "Шкала CFG",
   "Check Workflow Bridge": "Проверить Workflow Bridge",
   "Check the connection first to load checkpoint models.": "Сначала проверьте подключение, чтобы загрузить модели контрольных точек.",
@@ -1603,5 +1604,16 @@
   "End Percent": "Конечная доля",
   "ComfyUI workflows currently accept only one reference image.": "Сейчас рабочие процессы ComfyUI принимают только одно эталонное изображение.",
   "The active ComfyUI workflow does not accept a reference image.": "Активный рабочий процесс ComfyUI не принимает эталонное изображение.",
-  "The active ComfyUI workflow requires one reference image.": "Активному рабочему процессу ComfyUI требуется одно эталонное изображение."
+  "The active ComfyUI workflow requires one reference image.": "Активному рабочему процессу ComfyUI требуется одно эталонное изображение.",
+  "Generation Parameters": "Параметры генерации",
+  "Reset to Workflow Defaults": "Сбросить настройки процесса",
+  "Recommended workflow: {{name}}": "Рекомендуемый процесс: {{name}}",
+  "Switch Workflow": "Сменить процесс",
+  "Generation cancelled": "Генерация отменена",
+  "Queue position: {{position}}": "Позиция в очереди: {{position}}",
+  "Reuse Settings": "Повторить настройки",
+  "Unable to prepare reference image.": "Не удалось подготовить эталонное изображение.",
+  "Reference image optimized to {{width}} × {{height}}.": "Эталонное изображение оптимизировано до {{width}} × {{height}}.",
+  "The saved ComfyUI workflow is no longer available.": "Сохранённый процесс ComfyUI больше недоступен.",
+  "Missing ComfyUI model: {{name}}": "Отсутствует модель ComfyUI: {{name}}"
 }

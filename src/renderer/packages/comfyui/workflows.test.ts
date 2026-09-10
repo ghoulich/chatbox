@@ -6,6 +6,9 @@ import {
   createTextToImageProfile,
   DEFAULT_COMFYUI_BUILDER,
   ensureWorkflowLibrary,
+  getComfyUIRuntimeDefaults,
+  getComfyUIRuntimeParameterDescriptors,
+  recommendComfyUIWorkflow,
   removeWorkflow,
   upsertAndActivateWorkflow,
 } from './workflows'
@@ -149,5 +152,30 @@ describe('ComfyUI workflow library compatibility', () => {
     settings = removeWorkflow(settings, first.id)
     expect(settings.activeWorkflowId).toBe(second.id)
     expect(settings.workflowName).toBe('Second')
+  })
+})
+
+describe('ComfyUI mobile runtime controls', () => {
+  it('derives reproducible defaults and supported fields from a generated workflow', () => {
+    const profile = createTextToImageProfile('Runtime', { ...builder, loraName: 'detail.safetensors' }, 1)
+    expect(getComfyUIRuntimeDefaults(profile)).toMatchObject({
+      width: 768,
+      height: 512,
+      steps: 28,
+      cfg: 6.5,
+      sampler: 'dpmpp_2m',
+      scheduler: 'karras',
+      loraStrength: 1,
+    })
+    expect(getComfyUIRuntimeParameterDescriptors(profile).map((item) => item.key)).toEqual(
+      expect.arrayContaining(['width', 'height', 'steps', 'cfg', 'seed', 'sampler', 'scheduler', 'loraStrength'])
+    )
+  })
+
+  it('recommends a capability-compatible workflow when the active workflow cannot accept the input', () => {
+    const text = createTextToImageProfile('Text', builder, 1)
+    const image = createTextToImageProfile('Image', { ...builder, mode: 'image-to-image' }, 2)
+    expect(recommendComfyUIWorkflow([text, image], 1, text.id)?.id).toBe(image.id)
+    expect(recommendComfyUIWorkflow([text, image], 0, image.id)?.id).toBe(text.id)
   })
 })

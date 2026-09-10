@@ -66,6 +66,8 @@ function makeRow(record: ImageGeneration): Record<string, unknown> {
     task_id: record.taskId,
     aspect_ratio: null,
     source: JSON.stringify(record.source),
+    comfyui_metadata: record.comfyuiMetadata ? JSON.stringify(record.comfyuiMetadata) : null,
+    progress: record.progress ? JSON.stringify(record.progress) : null,
   }
 }
 
@@ -85,6 +87,8 @@ describe('SQLiteImageGenerationStorage', () => {
     await storage.initialize()
 
     expect(mockDatabase.execute).toHaveBeenCalledWith('ALTER TABLE image_generation ADD COLUMN source TEXT')
+    expect(mockDatabase.execute).toHaveBeenCalledWith('ALTER TABLE image_generation ADD COLUMN comfyui_metadata TEXT')
+    expect(mockDatabase.execute).toHaveBeenCalledWith('ALTER TABLE image_generation ADD COLUMN progress TEXT')
   })
 
   it('persists and restores the CLI source', async () => {
@@ -93,26 +97,31 @@ describe('SQLiteImageGenerationStorage', () => {
 
     await storage.create(record)
 
-    expect(mockDatabase.run).toHaveBeenCalledWith(expect.stringContaining('aspect_ratio, source'), [
-      'record-1',
-      'red fox',
-      '[]',
-      '[]',
-      null,
-      1_000,
-      'chatbox-ai',
-      'manifest-image',
-      null,
-      null,
-      'pending',
-      null,
-      null,
-      null,
-      null,
-      'task-1',
-      null,
-      JSON.stringify(source),
-    ])
+    expect(mockDatabase.run).toHaveBeenCalledWith(
+      expect.stringContaining('aspect_ratio, source, comfyui_metadata, progress'),
+      [
+        'record-1',
+        'red fox',
+        '[]',
+        '[]',
+        null,
+        1_000,
+        'chatbox-ai',
+        'manifest-image',
+        null,
+        null,
+        'pending',
+        null,
+        null,
+        null,
+        null,
+        'task-1',
+        null,
+        JSON.stringify(source),
+        null,
+        null,
+      ]
+    )
 
     mockDatabase.query.mockResolvedValueOnce({ values: [makeRow(record)] })
 
@@ -129,25 +138,57 @@ describe('SQLiteImageGenerationStorage', () => {
       source,
     })
 
-    expect(mockDatabase.run).toHaveBeenCalledWith(expect.stringContaining('aspect_ratio = ?, source = ?'), [
-      'red fox',
-      '[]',
-      '[]',
-      null,
-      1_000,
-      'chatbox-ai',
-      'manifest-image',
-      null,
-      null,
-      'generating',
-      null,
-      null,
-      null,
-      null,
-      'task-1',
-      null,
-      JSON.stringify(source),
-      'record-1',
-    ])
+    expect(mockDatabase.run).toHaveBeenCalledWith(
+      expect.stringContaining('aspect_ratio = ?, source = ?, comfyui_metadata = ?, progress = ?'),
+      [
+        'red fox',
+        '[]',
+        '[]',
+        null,
+        1_000,
+        'chatbox-ai',
+        'manifest-image',
+        null,
+        null,
+        'generating',
+        null,
+        null,
+        null,
+        null,
+        'task-1',
+        null,
+        JSON.stringify(source),
+        null,
+        null,
+        'record-1',
+      ]
+    )
+  })
+
+  it('persists and restores ComfyUI metadata and terminal progress', async () => {
+    const storage = new SQLiteImageGenerationStorage()
+    const comfyuiMetadata: NonNullable<ImageGeneration['comfyuiMetadata']> = {
+      workflowId: 'workflow-1',
+      workflowName: 'SD 1.5 mobile',
+      workflowRevision: 3,
+      parameters: { width: 512, height: 512, steps: 20, cfg: 7, seed: 501 },
+      submittedAt: 2_000,
+    }
+    const progress: NonNullable<ImageGeneration['progress']> = {
+      stage: 'cancelled',
+      percent: 0,
+      updatedAt: 3_000,
+    }
+    const record = makeRecord({ comfyuiMetadata, progress })
+
+    await storage.create(record)
+
+    expect(mockDatabase.run).toHaveBeenCalledWith(
+      expect.stringContaining('comfyui_metadata, progress'),
+      expect.arrayContaining([JSON.stringify(comfyuiMetadata), JSON.stringify(progress)])
+    )
+
+    mockDatabase.query.mockResolvedValueOnce({ values: [makeRow(record)] })
+    await expect(storage.getById(record.id)).resolves.toMatchObject({ comfyuiMetadata, progress })
   })
 })

@@ -1538,6 +1538,7 @@
   "The current ComfyUI integration supports text-to-image workflows only.": "現在の ComfyUI 連携はテキストから画像へのワークフローのみ対応しています。",
   "API workflow only": "APIワークフローのみ",
   "Active Workflow": "使用中のワークフロー",
+  "Sampling Steps": "サンプリングステップ",
   "CFG Scale": "CFGスケール",
   "Check Workflow Bridge": "Workflow Bridgeを確認",
   "Check the connection first to load checkpoint models.": "チェックポイントモデルを読み込むには、先に接続を確認してください。",
@@ -1603,5 +1604,16 @@
   "End Percent": "終了位置",
   "ComfyUI workflows currently accept only one reference image.": "ComfyUI ワークフローで使用できる参照画像は現在1枚だけです。",
   "The active ComfyUI workflow does not accept a reference image.": "現在の ComfyUI ワークフローは参照画像を受け付けません。",
-  "The active ComfyUI workflow requires one reference image.": "現在の ComfyUI ワークフローには参照画像が1枚必要です。"
+  "The active ComfyUI workflow requires one reference image.": "現在の ComfyUI ワークフローには参照画像が1枚必要です。",
+  "Generation Parameters": "生成パラメーター",
+  "Reset to Workflow Defaults": "ワークフローの既定値に戻す",
+  "Recommended workflow: {{name}}": "推奨ワークフロー：{{name}}",
+  "Switch Workflow": "ワークフローを切り替え",
+  "Generation cancelled": "生成をキャンセルしました",
+  "Queue position: {{position}}": "キュー内の位置：{{position}}",
+  "Reuse Settings": "設定を再利用",
+  "Unable to prepare reference image.": "参照画像を処理できませんでした。",
+  "Reference image optimized to {{width}} × {{height}}.": "参照画像を {{width}} × {{height}} に最適化しました。",
+  "The saved ComfyUI workflow is no longer available.": "保存された ComfyUI ワークフローは利用できません。",
+  "Missing ComfyUI model: {{name}}": "ComfyUI モデルがありません：{{name}}"
 }

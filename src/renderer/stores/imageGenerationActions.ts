@@ -1,6 +1,14 @@
 import { BaseError } from '@shared/models/errors'
 import { getModel } from '@shared/providers'
-import type { ImageGeneration, ImageGenerationModel, ImageGenerationSource } from '@shared/types'
+import type {
+  ComfyUIGenerationMetadata,
+  ComfyUIReferenceProcessing,
+  ComfyUIRuntimeParameters,
+  ImageGeneration,
+  ImageGenerationModel,
+  ImageGenerationProgress,
+  ImageGenerationSource,
+} from '@shared/types'
 import { ModelProviderEnum } from '@shared/types'
 import { createModelDependencies } from '@/adapters'
 import { normalizePlausibleModel, normalizePlausibleProvider } from '@/analytics/plausible'
@@ -16,7 +24,8 @@ import {
 import platform from '@/platform'
 import storage from '@/storage'
 import { StorageKeyGenerator } from '@/storage/StoreStorage'
-import { COMFYUI_IMAGE_PROVIDER_ID } from '@/packages/comfyui/constants'
+import { COMFYUI_IMAGE_PROVIDER_ID, COMFYUI_WORKFLOW_MODEL_ID } from '@/packages/comfyui/constants'
+import { activateWorkflow, getComfyUIRuntimeDefaults } from '@/packages/comfyui/workflows'
 import { trackEvent } from '@/utils/track'
 import {
   addGeneratedImage,
@@ -35,6 +44,8 @@ const log = getLogger('image-generation-actions')
 // AbortController for cancelling in-flight polling
 let currentAbortController: AbortController | null = null
 let currentComfyUIJob: { promptId: string; recordId: string } | null = null
+let currentComfyUIRecordId: string | null = null
+const cancelledComfyUIRecordIds = new Set<string>()
 
 function getLicenseKey(): string {
   const licenseKey = settingsStore.getState().licenseKey
@@ -95,6 +106,41 @@ export interface GenerateImageParams {
   aspectRatio?: string
   parentIds?: string[]
   source?: ImageGenerationSource
+  comfyui?: {
+    workflowId: string
+    workflowName: string
+    workflowRevision?: number
+    parameters: ComfyUIRuntimeParameters
+    referenceProcessing?: ComfyUIReferenceProcessing
+  }
+}
+
+function progressUpdate(progress: Omit<ImageGenerationProgress, 'updatedAt'>): Pick<ImageGeneration, 'progress'> {
+  return { progress: { ...progress, updatedAt: Date.now() } }
+}
+
+async function markComfyUIGenerationCancelled(recordId: string): Promise<ImageGeneration | null> {
+  const updated = await updateRecord(recordId, {
+    status: 'error',
+    error: i18n.t('Generation cancelled') ?? 'Generation cancelled',
+    ...progressUpdate({ stage: 'cancelled', percent: 0 }),
+  })
+  if (updated) queryClient.setQueryData([IMAGE_GEN_QUERY_KEY, recordId], updated)
+  return updated
+}
+
+function getComfyUIMetadata(params: GenerateImageParams): ComfyUIGenerationMetadata | undefined {
+  if (params.model.provider !== COMFYUI_IMAGE_PROVIDER_ID) return undefined
+  if (params.comfyui) return { ...params.comfyui }
+  const comfyui = settingsStore.getState().comfyui
+  const profile = comfyui.workflowProfiles.find((item) => item.id === comfyui.activeWorkflowId)
+  if (!profile) return undefined
+  return {
+    workflowId: profile.id,
+    workflowName: profile.name,
+    workflowRevision: profile.remote?.revision,
+    parameters: getComfyUIRuntimeDefaults(profile),
+  }
 }
 
 export function isGenerating(): boolean {
@@ -136,6 +182,7 @@ export async function startImageGeneration(
     throw new Error('Another image is being generated. Please wait.')
   }
 
+  const comfyuiMetadata = getComfyUIMetadata(params)
   const record = await createRecord({
     prompt: params.prompt,
     referenceImages: params.referenceImages,
@@ -145,6 +192,8 @@ export async function startImageGeneration(
     parentIds: params.parentIds,
     aspectRatio: params.aspectRatio,
     source: params.source,
+    comfyuiMetadata,
+    ...(comfyuiMetadata ? progressUpdate({ stage: 'preparing', percent: 0 }) : {}),
   })
 
   try {
@@ -186,11 +235,21 @@ async function generateImagesWithComfyUI(
 ): Promise<ImageGeneration | null> {
   const num = params.imageGenerateNum || 1
   currentAbortController = new AbortController()
+  currentComfyUIRecordId = recordId
   const signal = currentAbortController.signal
 
   try {
-    const comfyui = settingsStore.getState().comfyui
-    const activeProfile = comfyui.workflowProfiles.find((profile) => profile.id === comfyui.activeWorkflowId)
+    const storedComfyUI = settingsStore.getState().comfyui
+    const workflowId = params.comfyui?.workflowId
+    const activeProfile = storedComfyUI.workflowProfiles.find((profile) =>
+      workflowId ? profile.id === workflowId : profile.id === storedComfyUI.activeWorkflowId
+    )
+    if (!activeProfile)
+      throw new Error(
+        i18n.t('The saved ComfyUI workflow is no longer available.') ??
+          'The saved ComfyUI workflow is no longer available.'
+      )
+    const comfyui = activateWorkflow(storedComfyUI, activeProfile.id)
     if (params.referenceImages.length > 1)
       throw new Error(
         i18n.t('ComfyUI workflows currently accept only one reference image.') ??
@@ -206,6 +265,23 @@ async function generateImagesWithComfyUI(
       throw new Error(
         i18n.t('The active ComfyUI workflow requires one reference image.') ??
           'The active ComfyUI workflow requires one reference image.'
+      )
+    }
+    const { generateWithComfyUI, validateComfyUIModels } = await import('@/packages/comfyui/client')
+    const missingModels = await validateComfyUIModels(
+      comfyui,
+      {
+        checkpoint:
+          params.model.modelId === COMFYUI_WORKFLOW_MODEL_ID ? activeProfile.builder?.checkpoint : params.model.modelId,
+        lora: activeProfile.builder?.loraName,
+        controlNet: activeProfile.builder?.controlNetName,
+      },
+      signal
+    )
+    if (missingModels.length > 0) {
+      throw new Error(
+        i18n.t('Missing ComfyUI model: {{name}}', { name: missingModels.join(', ') }) ??
+          `Missing ComfyUI model: ${missingModels.join(', ')}`
       )
     }
     let referenceImage: string | undefined
@@ -236,7 +312,14 @@ async function generateImagesWithComfyUI(
       has_reference: Boolean(referenceImage),
       path: 'comfyui',
     })
-    const { generateWithComfyUI } = await import('@/packages/comfyui/client')
+    let pendingRecordUpdate = Promise.resolve()
+    const queueRecordUpdate = (updates: Partial<ImageGeneration>) => {
+      pendingRecordUpdate = pendingRecordUpdate.then(async () => {
+        if (cancelledComfyUIRecordIds.has(recordId)) return
+        const updated = await updateRecord(recordId, updates)
+        if (updated) queryClient.setQueryData([IMAGE_GEN_QUERY_KEY, recordId], updated)
+      })
+    }
     const result = await generateWithComfyUI(comfyui, {
       prompt: params.prompt,
       checkpoint: params.model.modelId,
@@ -244,13 +327,31 @@ async function generateImagesWithComfyUI(
       aspectRatio: params.aspectRatio,
       count: num,
       signal,
+      runtimeParameters: params.comfyui?.parameters ?? getComfyUIRuntimeDefaults(activeProfile),
       onSubmitted: (promptId) => {
         currentComfyUIJob = { promptId, recordId }
-        void updateRecord(recordId, { taskId: promptId }).then((updated) => {
-          if (updated) queryClient.setQueryData([IMAGE_GEN_QUERY_KEY, recordId], updated)
+        queueRecordUpdate({
+          taskId: promptId,
+          comfyuiMetadata: {
+            ...(params.comfyui ?? {
+              workflowId: activeProfile.id,
+              workflowName: activeProfile.name,
+              workflowRevision: activeProfile.remote?.revision,
+              parameters: getComfyUIRuntimeDefaults(activeProfile),
+            }),
+            submittedAt: Date.now(),
+          },
         })
       },
+      onProgress: (progress) => {
+        queueRecordUpdate(progressUpdate(progress))
+      },
     })
+    await pendingRecordUpdate
+
+    if (cancelledComfyUIRecordIds.has(recordId)) {
+      return await markComfyUIGenerationCancelled(recordId)
+    }
 
     for (const image of result.images) {
       const storageKey = StorageKeyGenerator.picture(`image-gen:${recordId}`)
@@ -261,10 +362,25 @@ async function generateImagesWithComfyUI(
     currentRecord = await updateRecord(recordId, {
       status: result.images.length < num ? 'error' : 'done',
       error: result.images.length < num ? 'ComfyUI returned fewer images than requested' : undefined,
+      comfyuiMetadata: {
+        ...(params.comfyui ??
+          currentRecord?.comfyuiMetadata ?? {
+            workflowId: activeProfile.id,
+            workflowName: activeProfile.name,
+            workflowRevision: activeProfile.remote?.revision,
+          }),
+        parameters: result.parameters,
+        completedAt: Date.now(),
+      },
+      ...progressUpdate({ stage: 'completed', percent: 100 }),
     })
     if (currentRecord) queryClient.setQueryData([IMAGE_GEN_QUERY_KEY, recordId], currentRecord)
     return currentRecord
   } catch (err: unknown) {
+    if (cancelledComfyUIRecordIds.has(recordId)) {
+      log.debug('ComfyUI image generation cancelled:', recordId)
+      return await markComfyUIGenerationCancelled(recordId)
+    }
     if (err instanceof Error && err.name === 'AbortError') {
       log.debug('ComfyUI image generation aborted:', recordId)
       return null
@@ -276,6 +392,8 @@ async function generateImagesWithComfyUI(
   } finally {
     currentAbortController = null
     currentComfyUIJob = null
+    currentComfyUIRecordId = null
+    cancelledComfyUIRecordIds.delete(recordId)
   }
 }
 
@@ -529,18 +647,22 @@ export function cancelGeneration(): void {
       currentAbortController = null
     }
 
-    if (currentComfyUIJob) {
+    const comfyUIRecordId = currentComfyUIJob?.recordId ?? currentComfyUIRecordId
+    if (comfyUIRecordId) {
       const job = currentComfyUIJob
+      cancelledComfyUIRecordIds.add(comfyUIRecordId)
       currentComfyUIJob = null
+      currentComfyUIRecordId = null
       const comfyui = settingsStore.getState().comfyui
-      void import('@/packages/comfyui/client').then(({ cancelComfyUIJob }) =>
-        cancelComfyUIJob(comfyui, job.promptId).finally(() => {
-          void updateRecord(job.recordId, { status: 'error', error: 'Generation cancelled' })
-        })
-      )
+      void markComfyUIGenerationCancelled(comfyUIRecordId)
+      if (job) {
+        void import('@/packages/comfyui/client')
+          .then(({ cancelComfyUIJob }) => cancelComfyUIJob(comfyui, job.promptId))
+          .catch((error) => log.warn('Unable to cancel the remote ComfyUI job:', error))
+      }
     }
 
-    // Keep status as 'generating' so "Resume Generation" button appears
+    // Clear the active job after the persisted record has been marked as cancelled.
     store.setCurrentGeneratingId(null)
     queryClient.invalidateQueries({ queryKey: [IMAGE_GEN_LIST_QUERY_KEY] })
   }
@@ -577,14 +699,20 @@ export async function resumeGeneration(recordId: string): Promise<ImageGeneratio
   if (record.model.provider === COMFYUI_IMAGE_PROVIDER_ID) {
     store.setCurrentGeneratingId(recordId)
     currentAbortController = new AbortController()
+    currentComfyUIRecordId = recordId
     currentComfyUIJob = { promptId: record.taskId, recordId }
     try {
       const { waitForComfyUIImages } = await import('@/packages/comfyui/client')
-      const images = await waitForComfyUIImages(
-        settingsStore.getState().comfyui,
-        record.taskId,
-        currentAbortController.signal
-      )
+      const storedComfyUI = settingsStore.getState().comfyui
+      const resumableProfile = record.comfyuiMetadata
+        ? storedComfyUI.workflowProfiles.find((profile) => profile.id === record.comfyuiMetadata?.workflowId)
+        : undefined
+      const comfyui = resumableProfile ? activateWorkflow(storedComfyUI, resumableProfile.id) : storedComfyUI
+      const images = await waitForComfyUIImages(comfyui, record.taskId, currentAbortController.signal, (progress) => {
+        void updateRecord(recordId, progressUpdate(progress)).then((updated) => {
+          if (updated) queryClient.setQueryData([IMAGE_GEN_QUERY_KEY, recordId], updated)
+        })
+      })
       for (let index = record.generatedImages.length; index < images.length; index++) {
         const storageKey = StorageKeyGenerator.picture(`image-gen:${recordId}`)
         await storage.setBlob(storageKey, images[index])
@@ -594,6 +722,8 @@ export async function resumeGeneration(recordId: string): Promise<ImageGeneratio
         status: images.length < (record.imageGenerateNum || 1) ? 'error' : 'done',
         error:
           images.length < (record.imageGenerateNum || 1) ? 'ComfyUI returned fewer images than requested' : undefined,
+        comfyuiMetadata: record.comfyuiMetadata ? { ...record.comfyuiMetadata, completedAt: Date.now() } : undefined,
+        ...progressUpdate({ stage: 'completed', percent: 100 }),
       })
       if (updated) queryClient.setQueryData([IMAGE_GEN_QUERY_KEY, updated.id], updated)
       return updated
@@ -605,6 +735,7 @@ export async function resumeGeneration(recordId: string): Promise<ImageGeneratio
     } finally {
       currentAbortController = null
       currentComfyUIJob = null
+      currentComfyUIRecordId = null
       store.setCurrentGeneratingId(null)
       queryClient.invalidateQueries({ queryKey: [IMAGE_GEN_LIST_QUERY_KEY] })
     }
@@ -699,6 +830,7 @@ export async function retryGeneration(recordId: string): Promise<void> {
     error: undefined,
     errorCode: undefined,
     errorItemUuid: undefined,
+    ...(record.comfyuiMetadata ? progressUpdate({ stage: 'preparing', percent: 0 }) : {}),
   })
 
   store.setCurrentGeneratingId(recordId)
@@ -710,6 +842,15 @@ export async function retryGeneration(recordId: string): Promise<void> {
     dalleStyle: record.dalleStyle,
     imageGenerateNum: record.imageGenerateNum,
     aspectRatio: record.aspectRatio,
+    comfyui: record.comfyuiMetadata
+      ? {
+          workflowId: record.comfyuiMetadata.workflowId,
+          workflowName: record.comfyuiMetadata.workflowName,
+          workflowRevision: record.comfyuiMetadata.workflowRevision,
+          parameters: record.comfyuiMetadata.parameters,
+          referenceProcessing: record.comfyuiMetadata.referenceProcessing,
+        }
+      : undefined,
   }
 
   const generateFn =

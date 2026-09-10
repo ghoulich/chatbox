@@ -22,6 +22,53 @@ export const ImageGenerationSourceSchema = z.discriminatedUnion('type', [
 ])
 export type ImageGenerationSource = z.infer<typeof ImageGenerationSourceSchema>
 
+export const ComfyUIRuntimeParametersSchema = z.object({
+  width: z.number().int().min(64).max(8192).optional(),
+  height: z.number().int().min(64).max(8192).optional(),
+  steps: z.number().int().min(1).max(150).optional(),
+  cfg: z.number().min(0).max(100).optional(),
+  seed: z.number().int().min(-1).optional(),
+  sampler: z.string().optional(),
+  scheduler: z.string().optional(),
+  denoise: z.number().min(0).max(1).optional(),
+  loraStrength: z.number().min(-10).max(10).optional(),
+  controlNetStrength: z.number().min(0).max(10).optional(),
+  controlNetStart: z.number().min(0).max(1).optional(),
+  controlNetEnd: z.number().min(0).max(1).optional(),
+})
+export type ComfyUIRuntimeParameters = z.infer<typeof ComfyUIRuntimeParametersSchema>
+
+export const ComfyUIReferenceProcessingSchema = z.object({
+  originalBytes: z.number().int().nonnegative(),
+  processedBytes: z.number().int().nonnegative(),
+  originalWidth: z.number().int().positive(),
+  originalHeight: z.number().int().positive(),
+  width: z.number().int().positive(),
+  height: z.number().int().positive(),
+  mimeType: z.string(),
+  resized: z.boolean(),
+})
+export type ComfyUIReferenceProcessing = z.infer<typeof ComfyUIReferenceProcessingSchema>
+
+export const ComfyUIGenerationMetadataSchema = z.object({
+  workflowId: z.string(),
+  workflowName: z.string(),
+  workflowRevision: z.number().int().min(1).optional(),
+  parameters: ComfyUIRuntimeParametersSchema,
+  referenceProcessing: ComfyUIReferenceProcessingSchema.optional(),
+  submittedAt: z.number().int().nonnegative().optional(),
+  completedAt: z.number().int().nonnegative().optional(),
+})
+export type ComfyUIGenerationMetadata = z.infer<typeof ComfyUIGenerationMetadataSchema>
+
+export const ImageGenerationProgressSchema = z.object({
+  stage: z.enum(['preparing', 'uploading', 'queued', 'running', 'downloading', 'completed', 'cancelled']),
+  percent: z.number().min(0).max(100).optional(),
+  queuePosition: z.number().int().min(1).optional(),
+  updatedAt: z.number().int().nonnegative(),
+})
+export type ImageGenerationProgress = z.infer<typeof ImageGenerationProgressSchema>
+
 // Image generation record schema
 export const ImageGenerationSchema = z.object({
   id: z.string(),
@@ -42,6 +89,8 @@ export const ImageGenerationSchema = z.object({
   errorItemUuid: z.string().optional(),
   taskId: z.string().optional(), // Backend task ID for polling
   aspectRatio: z.string().optional(), // Store aspect ratio for record
+  comfyuiMetadata: ComfyUIGenerationMetadataSchema.optional(),
+  progress: ImageGenerationProgressSchema.optional(),
   source: ImageGenerationSourceSchema.optional(), // Originating workflow for reconnecting completion callbacks
 })
 export type ImageGeneration = z.infer<typeof ImageGenerationSchema>

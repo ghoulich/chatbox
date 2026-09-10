@@ -12,7 +12,7 @@
 ## ghoulich Android 二开版
 
 本 fork 以官方 Chatbox `v1.23.1` 为基线，当前二开版本为
-`1.23.1.495`。在保留上游桌面端和 Web 代码的同时，Android 端增加：
+`1.23.1.502`。在保留上游桌面端和 Web 代码的同时，Android 端增加：
 
 - 通过 Android SAF 只读扫描 Skills，在对话中调用 `load_skill`，并在
   Android 对话模式中启用 Skills 与远程 HTTP/SSE MCP；
@@ -23,9 +23,11 @@
 - 网页读取可选择 Chatbox 原生 `parse_link` 或自托管 Firecrawl；Firecrawl
   支持可选 Bearer Token、受限超时、Android 原生 HTTP 传输，并提供默认关闭
   的原生读取回退开关；
-- 原生接入自托管 ComfyUI 生图：支持端点及可选 Basic Auth 用户名/密码、API 工作流导入、
-  标准节点自动识别、显式参数映射、检查点模型发现、轮询/取消，以及把结果下载
-  到本地图像历史；可设置默认生图模型，同时保留原有云端生图提供方；
+- 原生接入自托管 ComfyUI 生图：支持端点及可选 Basic Auth 用户名/密码、检查点/LoRA/
+  ControlNet 发现、多工作流库、表单式工作流设计器和 Bridge 双向同步；第三阶段 Lite
+  增加工作流自有的基础/高级参数、能力推荐、排队/进度/取消/恢复、可复现的工作流/
+  参数/种子元数据、一键复用设置和移动端参考图安全缩放上传；同时保留高级 JSON
+  导入、本地历史与原有云端生图提供方；
 - 新会话 Soul/人格注入，以及不会覆盖用户手动命名的搭档会话自动标题；
 - DNS、Ping、TCP、HTTP/TLS、Wi-Fi/LAN、限流测速、SSH 和只读 SNMP 等
   Android 本地网络诊断，敏感凭据不会出现在模型可见的工具结果中；
@@ -44,7 +46,7 @@
 已验证壳组装 APK。签名证书、口令、APK、私人模型/搜索配置和应用数据库不会
 提交到仓库。实现说明见 [`custom/android/README.md`](../custom/android/README.md)，
 最新设备测试见
-[`test-evidence/mumu-v492/TEST_REPORT.md`](../test-evidence/mumu-v492/TEST_REPORT.md)。
+[`test-evidence/mumu-v502/TEST_REPORT.md`](../test-evidence/mumu-v502/TEST_REPORT.md)。
 
 ### Firecrawl 配置
 
@@ -57,10 +59,17 @@
 ### ComfyUI 配置
 
 打开“**设置 → ComfyUI 图像生成**”，填写 ComfyUI 或带身份认证反向代理的基础
-地址；仅在服务需要时填写 Basic Auth 用户名和密码。在 ComfyUI 中使用 **Save (API Format)**
-导出工作流并导入 JSON。标准的检查点、提示词、采样器和潜空间图像节点会自动
-识别；自定义工作流可用“`节点ID.输入名`”显式映射。点击“**检查 ComfyUI 连接**”
-验证后，还可到“**设置 → 默认模型 → 默认图像生成模型**”选择默认检查点。
+地址；仅在服务需要时填写 Basic Auth 用户名和密码。点击“**检查 ComfyUI 连接**”
+发现检查点、LoRA 和 ControlNet，再用“**检查工作流 Bridge**”验证同步。表单式
+“**工作流设计器**”可创建文生图、图生图、单 LoRA 或 ControlNet 工作流；
+“**工作流库**”用于选择、推送、拉取和删除同步工作流，并用远程 revision 阻止
+并发覆盖。ComfyUI 页面中创建的工作流需先执行 **Chatbox Bridge → Sync current
+workflow to ChatBox**，才会作为受管工作流出现在 Chatbox 中。
+
+高级用户仍可导入或粘贴 API-format JSON。标准的检查点、提示词、采样器、潜空间、
+图片加载、LoRA 和 ControlNet 节点会尽量自动识别；自定义工作流可用
+“`节点ID.输入名`”显式映射。还可到“**设置 → 默认模型 → 默认图像生成模型**”
+选择默认检查点。
 
 工作流中的宽、高为有效数值或节点连线时优先使用；设置里的默认宽、高只补齐
 缺失、为零或无效的工作流输入。选择 ComfyUI 后，生图页面不再显示容易产生
@@ -74,6 +83,16 @@ Android 端到端测试使用的最小 SD 1.5 API 工作流见
 的用户隔离目录中成对保存可编辑 UI-format 和可执行 API-format，无需向公网开放
 范围更大的 `/userdata` 接口；构建校验、宿主机挂载/K8S 安装、Ingress、升级和
 卸载方式见扩展目录内的 README。
+
+在“**图片生成器**”中，上传按钮旁的工作流按钮用于选择工作流并打开其运行参数。
+Chatbox 只显示该工作流声明的基础/高级参数，根据文生图、参考图、LoRA、ControlNet
+等能力推荐兼容工作流，并显示排队、运行、下载、完成或取消状态。应用重启后可继续
+恢复已有 ComfyUI prompt；历史记录保存工作流修订、实际参数、最终种子和参考图处理
+信息，点击“**复用设置**”可精确恢复后继续调整。移动端参考图在上传前会按尺寸、像素
+数和文件大小限制进行缩放及格式处理。
+
+第三阶段 Lite 不包含完整拖拽节点画布、无限 LoRA/ControlNet 叠加、专业蒙版编辑器
+或桌面式批量调试器，这些能力继续留在 ComfyUI 页面使用。
 
 ### 下载电脑端
 

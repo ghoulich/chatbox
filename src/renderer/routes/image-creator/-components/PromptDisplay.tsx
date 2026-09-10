@@ -1,14 +1,22 @@
-import { Flex, Stack, Text } from '@mantine/core'
-import { IconPhoto } from '@tabler/icons-react'
+import { Button, Flex, Stack, Text } from '@mantine/core'
+import { IconPhoto, IconRestore } from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
 
 export interface PromptDisplayProps {
   prompt: string
   modelDisplayName: string
   referenceImageCount: number
+  workflowName?: string
+  onReuseSettings?: () => void
 }
 
-export function PromptDisplay({ prompt, modelDisplayName, referenceImageCount }: PromptDisplayProps) {
+export function PromptDisplay({
+  prompt,
+  modelDisplayName,
+  referenceImageCount,
+  workflowName,
+  onReuseSettings,
+}: PromptDisplayProps) {
   const { t } = useTranslation()
 
   return (
@@ -20,6 +28,11 @@ export function PromptDisplay({ prompt, modelDisplayName, referenceImageCount }:
         <Text size="xs" c="gray.5">
           {modelDisplayName}
         </Text>
+        {workflowName && (
+          <Text size="xs" c="gray.5">
+            · {workflowName}
+          </Text>
+        )}
         {referenceImageCount > 0 && (
           <>
             <Text size="xs" c="gray.5">
@@ -34,6 +47,11 @@ export function PromptDisplay({ prompt, modelDisplayName, referenceImageCount }:
           </>
         )}
       </Flex>
+      {onReuseSettings && (
+        <Button variant="subtle" size="compact-xs" leftSection={<IconRestore size={13} />} onClick={onReuseSettings}>
+          {t('Reuse Settings')}
+        </Button>
+      )}
     </Stack>
   )
 }

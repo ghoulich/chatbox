@@ -1,4 +1,4 @@
-import type { Settings } from '@shared/types'
+import type { ComfyUIRuntimeParameters, Settings } from '@shared/types'
 
 export type ComfyUISettings = Settings['comfyui']
 export type ComfyUIWorkflowProfile = ComfyUISettings['workflowProfiles'][number]
@@ -36,6 +36,86 @@ export const COMFYUI_SAMPLERS = [
 ] as const
 
 export const COMFYUI_SCHEDULERS = ['normal', 'karras', 'exponential', 'sgm_uniform', 'simple', 'ddim_uniform'] as const
+
+export type ComfyUIRuntimeParameterKey = keyof ComfyUIRuntimeParameters
+
+export interface ComfyUIRuntimeParameterDescriptor {
+  key: ComfyUIRuntimeParameterKey
+  group: 'basic' | 'advanced'
+  minimum?: number
+  maximum?: number
+  step?: number
+  options?: readonly string[]
+}
+
+export function getComfyUIRuntimeDefaults(profile?: ComfyUIWorkflowProfile): ComfyUIRuntimeParameters {
+  const builder = profile?.builder
+  if (!builder) return {}
+  return {
+    ...(builder.mode === 'image-to-image' ? {} : { width: builder.width, height: builder.height }),
+    steps: builder.steps,
+    cfg: builder.cfg,
+    seed: builder.seed,
+    sampler: builder.sampler,
+    scheduler: builder.scheduler,
+    ...(builder.mode === 'image-to-image' ? { denoise: builder.denoise } : {}),
+    ...(builder.loraName ? { loraStrength: builder.loraStrength } : {}),
+    ...(builder.mode === 'controlnet'
+      ? {
+          controlNetStrength: builder.controlNetStrength,
+          controlNetStart: builder.controlNetStart,
+          controlNetEnd: builder.controlNetEnd,
+        }
+      : {}),
+  }
+}
+
+export function getComfyUIRuntimeParameterDescriptors(
+  profile?: ComfyUIWorkflowProfile
+): ComfyUIRuntimeParameterDescriptor[] {
+  if (!profile) return []
+  const builder = profile.builder
+  const mapping = profile.inputMapping
+  const result: ComfyUIRuntimeParameterDescriptor[] = []
+  const available = (key: keyof typeof mapping) => Boolean(builder || mapping[key])
+  if (builder?.mode !== 'image-to-image' && available('width')) {
+    result.push(
+      { key: 'width', group: 'basic', minimum: 64, maximum: 8192, step: 64 },
+      { key: 'height', group: 'basic', minimum: 64, maximum: 8192, step: 64 }
+    )
+  }
+  if (available('steps')) result.push({ key: 'steps', group: 'basic', minimum: 1, maximum: 150, step: 1 })
+  if (available('cfg')) result.push({ key: 'cfg', group: 'basic', minimum: 0, maximum: 100, step: 0.5 })
+  if (available('seed')) result.push({ key: 'seed', group: 'basic', minimum: -1, step: 1 })
+  if (builder?.mode === 'image-to-image' || mapping.denoise) {
+    result.push({ key: 'denoise', group: 'basic', minimum: 0, maximum: 1, step: 0.05 })
+  }
+  if (available('sampler')) result.push({ key: 'sampler', group: 'advanced', options: COMFYUI_SAMPLERS })
+  if (available('scheduler')) result.push({ key: 'scheduler', group: 'advanced', options: COMFYUI_SCHEDULERS })
+  if (builder?.loraName || mapping.loraStrengthModel || mapping.loraStrengthClip) {
+    result.push({ key: 'loraStrength', group: 'advanced', minimum: -10, maximum: 10, step: 0.05 })
+  }
+  if (builder?.mode === 'controlnet' || mapping.controlNetStrength) {
+    result.push(
+      { key: 'controlNetStrength', group: 'advanced', minimum: 0, maximum: 10, step: 0.05 },
+      { key: 'controlNetStart', group: 'advanced', minimum: 0, maximum: 1, step: 0.05 },
+      { key: 'controlNetEnd', group: 'advanced', minimum: 0, maximum: 1, step: 0.05 }
+    )
+  }
+  return result
+}
+
+export function recommendComfyUIWorkflow(
+  profiles: ComfyUIWorkflowProfile[],
+  referenceImageCount: number,
+  activeWorkflowId?: string
+): ComfyUIWorkflowProfile | undefined {
+  const active = profiles.find((profile) => profile.id === activeWorkflowId)
+  const acceptsInput = (profile: ComfyUIWorkflowProfile) =>
+    referenceImageCount > 0 ? profile.capabilities.imageToImage : profile.capabilities.textToImage
+  if (active && acceptsInput(active)) return active
+  return profiles.find(acceptsInput)
+}
 
 function newId(): string {
   return globalThis.crypto?.randomUUID?.() ?? `workflow-${Date.now()}-${Math.random().toString(36).slice(2)}`
@@ -293,9 +373,17 @@ export function createTextToImageProfile(
       height: builder.mode === 'image-to-image' ? undefined : '5.height',
       seed: '3.seed',
       steps: '3.steps',
+      cfg: '3.cfg',
+      sampler: '3.sampler_name',
+      scheduler: '3.scheduler',
       batchSize: builder.mode === 'image-to-image' ? undefined : '5.batch_size',
       image: builder.mode === 'text-to-image' ? undefined : '11.image',
       denoise: '3.denoise',
+      loraStrengthModel: builder.loraName ? '10.strength_model' : undefined,
+      loraStrengthClip: builder.loraName ? '10.strength_clip' : undefined,
+      controlNetStrength: builder.mode === 'controlnet' ? '13.strength' : undefined,
+      controlNetStart: builder.mode === 'controlnet' ? '13.start_percent' : undefined,
+      controlNetEnd: builder.mode === 'controlnet' ? '13.end_percent' : undefined,
     },
     outputNodeId: '9',
     capabilities: {

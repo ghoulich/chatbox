@@ -1581,6 +1581,7 @@
   "The current ComfyUI integration supports text-to-image workflows only.": "当前 ComfyUI 接入仅支持文生图工作流。",
   "API workflow only": "仅 API 工作流",
   "Active Workflow": "当前工作流",
+  "Sampling Steps": "采样步数",
   "CFG Scale": "CFG 引导系数",
   "Check Workflow Bridge": "检查工作流桥接器",
   "Check the connection first to load checkpoint models.": "请先检查连接以加载检查点模型。",
@@ -1646,5 +1647,16 @@
   "End Percent": "结束比例",
   "ComfyUI workflows currently accept only one reference image.": "ComfyUI 工作流目前只支持一张参考图。",
   "The active ComfyUI workflow does not accept a reference image.": "当前 ComfyUI 工作流不接受参考图。",
-  "The active ComfyUI workflow requires one reference image.": "当前 ComfyUI 工作流需要一张参考图。"
+  "The active ComfyUI workflow requires one reference image.": "当前 ComfyUI 工作流需要一张参考图。",
+  "Generation Parameters": "生成参数",
+  "Reset to Workflow Defaults": "恢复工作流默认值",
+  "Recommended workflow: {{name}}": "推荐工作流：{{name}}",
+  "Switch Workflow": "切换工作流",
+  "Generation cancelled": "已取消生成",
+  "Queue position: {{position}}": "队列位置：{{position}}",
+  "Reuse Settings": "复用设置",
+  "Unable to prepare reference image.": "无法处理参考图。",
+  "Reference image optimized to {{width}} × {{height}}.": "参考图已优化为 {{width}} × {{height}}。",
+  "The saved ComfyUI workflow is no longer available.": "保存的 ComfyUI 工作流已不可用。",
+  "Missing ComfyUI model: {{name}}": "缺少 ComfyUI 模型：{{name}}"
 }

@@ -486,9 +486,17 @@ const ComfyUIInputMappingSchema = z.object({
   height: z.string().optional().catch(undefined),
   seed: z.string().optional().catch(undefined),
   steps: z.string().optional().catch(undefined),
+  cfg: z.string().optional().catch(undefined),
+  sampler: z.string().optional().catch(undefined),
+  scheduler: z.string().optional().catch(undefined),
   batchSize: z.string().optional().catch(undefined),
   image: z.string().optional().catch(undefined),
   denoise: z.string().optional().catch(undefined),
+  loraStrengthModel: z.string().optional().catch(undefined),
+  loraStrengthClip: z.string().optional().catch(undefined),
+  controlNetStrength: z.string().optional().catch(undefined),
+  controlNetStart: z.string().optional().catch(undefined),
+  controlNetEnd: z.string().optional().catch(undefined),
 })
 
 const ComfyUIWorkflowCapabilitiesSchema = z.object({

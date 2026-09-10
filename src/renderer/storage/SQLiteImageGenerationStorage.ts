@@ -29,8 +29,8 @@ export class SQLiteImageGenerationStorage implements ImageGenerationStorage {
       // ignore - connection may not exist
     }
 
-    // Bump version to 2 for new columns
-    this.database = await this.sqlite.createConnection(DB_NAME, false, 'no-encryption', 2, false)
+    // Bump version to 3 for persisted ComfyUI generation metadata and progress.
+    this.database = await this.sqlite.createConnection(DB_NAME, false, 'no-encryption', 3, false)
     await this.database.open()
 
     await this.database.execute(`
@@ -52,7 +52,9 @@ export class SQLiteImageGenerationStorage implements ImageGenerationStorage {
         error_item_uuid TEXT,
         task_id TEXT,
         aspect_ratio TEXT,
-        source TEXT
+        source TEXT,
+        comfyui_metadata TEXT,
+        progress TEXT
       )
     `)
 
@@ -62,6 +64,8 @@ export class SQLiteImageGenerationStorage implements ImageGenerationStorage {
     await this.addColumnIfNotExists('error_item_uuid', 'TEXT')
     await this.addColumnIfNotExists('generated_image_thumbnails', 'TEXT')
     await this.addColumnIfNotExists('source', 'TEXT')
+    await this.addColumnIfNotExists('comfyui_metadata', 'TEXT')
+    await this.addColumnIfNotExists('progress', 'TEXT')
 
     await this.database.execute(`
       CREATE INDEX IF NOT EXISTS idx_image_generation_created_at
@@ -99,6 +103,8 @@ export class SQLiteImageGenerationStorage implements ImageGenerationStorage {
       task_id: record.taskId || null,
       aspect_ratio: record.aspectRatio || null,
       source: record.source ? JSON.stringify(record.source) : null,
+      comfyui_metadata: record.comfyuiMetadata ? JSON.stringify(record.comfyuiMetadata) : null,
+      progress: record.progress ? JSON.stringify(record.progress) : null,
     }
   }
 
@@ -126,6 +132,8 @@ export class SQLiteImageGenerationStorage implements ImageGenerationStorage {
       taskId: (row.task_id as string) || undefined,
       aspectRatio: row.aspect_ratio as string | undefined,
       source: row.source ? JSON.parse(row.source as string) : undefined,
+      comfyuiMetadata: row.comfyui_metadata ? JSON.parse(row.comfyui_metadata as string) : undefined,
+      progress: row.progress ? JSON.parse(row.progress as string) : undefined,
     }
   }
 
@@ -135,8 +143,8 @@ export class SQLiteImageGenerationStorage implements ImageGenerationStorage {
 
     await this.database.run(
       `INSERT INTO image_generation
-       (id, prompt, reference_images, generated_images, generated_image_thumbnails, created_at, model_provider, model_id, dalle_style, image_generate_num, status, parent_id, error, error_code, error_item_uuid, task_id, aspect_ratio, source)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, prompt, reference_images, generated_images, generated_image_thumbnails, created_at, model_provider, model_id, dalle_style, image_generate_num, status, parent_id, error, error_code, error_item_uuid, task_id, aspect_ratio, source, comfyui_metadata, progress)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         row.id,
         row.prompt,
@@ -156,6 +164,8 @@ export class SQLiteImageGenerationStorage implements ImageGenerationStorage {
         row.task_id,
         row.aspect_ratio,
         row.source,
+        row.comfyui_metadata,
+        row.progress,
       ]
     )
   }
@@ -173,7 +183,7 @@ export class SQLiteImageGenerationStorage implements ImageGenerationStorage {
        prompt = ?, reference_images = ?, generated_images = ?, generated_image_thumbnails = ?, created_at = ?,
        model_provider = ?, model_id = ?, dalle_style = ?, image_generate_num = ?,
        status = ?, parent_id = ?, error = ?, error_code = ?, error_item_uuid = ?,
-       task_id = ?, aspect_ratio = ?, source = ?
+       task_id = ?, aspect_ratio = ?, source = ?, comfyui_metadata = ?, progress = ?
        WHERE id = ?`,
       [
         row.prompt,
@@ -193,6 +203,8 @@ export class SQLiteImageGenerationStorage implements ImageGenerationStorage {
         row.task_id,
         row.aspect_ratio,
         row.source,
+        row.comfyui_metadata,
+        row.progress,
         id,
       ]
     )

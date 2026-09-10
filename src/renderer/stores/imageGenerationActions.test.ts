@@ -12,6 +12,8 @@ const getImageMock = vi.fn()
 const setBlobMock = vi.fn()
 const addGeneratedImageMock = vi.fn()
 const generateWithComfyUIMock = vi.fn()
+const validateComfyUIModelsMock = vi.fn()
+const cancelComfyUIJobMock = vi.fn()
 const setCurrentGeneratingIdMock = vi.fn()
 const setCurrentRecordIdMock = vi.fn()
 const trackEventMock = vi.fn()
@@ -33,8 +35,12 @@ vi.mock('@/packages/remote', () => ({
 
 vi.mock('@/packages/comfyui/client', () => ({
   generateWithComfyUI: generateWithComfyUIMock,
-  cancelComfyUIJob: vi.fn(),
+  validateComfyUIModels: validateComfyUIModelsMock,
+  cancelComfyUIJob: cancelComfyUIJobMock,
+  waitForComfyUIImages: vi.fn(),
 }))
+
+let currentGeneratingIdMock: string | null = null
 
 vi.mock('./imageGenerationStore', () => ({
   IMAGE_GEN_LIST_QUERY_KEY: 'image-gen-list',
@@ -44,7 +50,7 @@ vi.mock('./imageGenerationStore', () => ({
   addGeneratedImage: addGeneratedImageMock,
   imageGenerationStore: {
     getState: () => ({
-      currentGeneratingId: null,
+      currentGeneratingId: currentGeneratingIdMock,
       currentRecordId: null,
       setCurrentGeneratingId: setCurrentGeneratingIdMock,
       setCurrentRecordId: setCurrentRecordIdMock,
@@ -65,7 +71,15 @@ vi.mock('./settingsStore', () => ({
       licenseKey: 'license-key',
       comfyui: {
         workflowProfiles: [
-          { id: 'img2img', capabilities: { textToImage: false, imageToImage: true, lora: false, controlNet: false } },
+          {
+            id: 'img2img',
+            name: 'Img2Img',
+            apiWorkflowJson: '{}',
+            inputMapping: {},
+            capabilities: { textToImage: false, imageToImage: true, lora: false, controlNet: false },
+            createdAt: 1,
+            updatedAt: 1,
+          },
         ],
         activeWorkflowId: 'img2img',
       },
@@ -109,6 +123,10 @@ vi.mock('@/storage/StoreStorage', () => ({
 describe('imageGenerationActions reference image payload', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    currentGeneratingIdMock = null
+    setCurrentGeneratingIdMock.mockImplementation((id: string | null) => {
+      currentGeneratingIdMock = id
+    })
 
     createRecordMock.mockResolvedValue({ id: 'record-1', createdAt: 1_000 })
     updateRecordMock.mockImplementation(async (id: string, patch: Record<string, unknown>) => ({ id, ...patch }))
@@ -126,7 +144,13 @@ describe('imageGenerationActions reference image payload', () => {
       ],
     })
     getImageMock.mockResolvedValue('data:image/png;base64,AAAA')
-    generateWithComfyUIMock.mockResolvedValue({ promptId: 'comfy-prompt-1', images: ['data:image/png;base64,BBBB'] })
+    validateComfyUIModelsMock.mockResolvedValue([])
+    cancelComfyUIJobMock.mockResolvedValue(undefined)
+    generateWithComfyUIMock.mockResolvedValue({
+      promptId: 'comfy-prompt-1',
+      images: ['data:image/png;base64,BBBB'],
+      parameters: { seed: 42, steps: 20 },
+    })
     addGeneratedImageMock.mockResolvedValue({ id: 'record-1', status: 'generating' })
     getImageGenerationByIdMock.mockResolvedValue({
       id: 'record-1',
@@ -216,6 +240,83 @@ describe('imageGenerationActions reference image payload', () => {
     )
     expect(setBlobMock).toHaveBeenCalledWith('generated-storage-key', 'data:image/png;base64,BBBB')
     expect(trackEventMock).toHaveBeenCalledWith('generate_image', expect.objectContaining({ has_reference: true }))
+  })
+
+  it('persists reproducible ComfyUI parameters and progress metadata', async () => {
+    const { createAndGenerate } = await import('./imageGenerationActions')
+
+    await createAndGenerate({
+      prompt: 'restyle it',
+      referenceImages: ['stored-reference'],
+      model: { provider: 'comfyui', modelId: '__workflow_default__' },
+      imageGenerateNum: 1,
+      comfyui: {
+        workflowId: 'img2img',
+        workflowName: 'Img2Img',
+        workflowRevision: 3,
+        parameters: { seed: -1, steps: 20 },
+      },
+    })
+    await vi.waitFor(() => expect(generateWithComfyUIMock).toHaveBeenCalledOnce())
+    const options = generateWithComfyUIMock.mock.calls[0][1]
+    options.onSubmitted('comfy-prompt-1')
+    options.onProgress({ stage: 'running', percent: 35 })
+
+    await vi.waitFor(() => {
+      expect(updateRecordMock).toHaveBeenCalledWith(
+        'record-1',
+        expect.objectContaining({
+          comfyuiMetadata: expect.objectContaining({
+            workflowId: 'img2img',
+            workflowRevision: 3,
+            parameters: { seed: 42, steps: 20 },
+          }),
+          progress: expect.objectContaining({ stage: 'completed', percent: 100 }),
+        })
+      )
+    })
+  })
+
+  it('keeps a user cancellation terminal when ComfyUI reports an execution error concurrently', async () => {
+    let rejectGeneration: ((error: Error) => void) | undefined
+    generateWithComfyUIMock.mockImplementationOnce(
+      async (_settings, options: { onSubmitted: (promptId: string) => void }) => {
+        options.onSubmitted('comfy-prompt-cancelled')
+        return await new Promise((_resolve, reject) => {
+          rejectGeneration = reject
+        })
+      }
+    )
+    const { cancelGeneration, createAndGenerate } = await import('./imageGenerationActions')
+
+    await createAndGenerate({
+      prompt: 'cancel this image',
+      referenceImages: ['stored-reference'],
+      model: { provider: 'comfyui', modelId: '__workflow_default__' },
+      imageGenerateNum: 1,
+    })
+    await vi.waitFor(() => expect(generateWithComfyUIMock).toHaveBeenCalledOnce())
+
+    cancelGeneration()
+    rejectGeneration?.(new Error('ComfyUI reported a workflow execution error'))
+
+    await vi.waitFor(() => {
+      expect(updateRecordMock).toHaveBeenCalledWith(
+        'record-1',
+        expect.objectContaining({
+          status: 'error',
+          error: 'Generation cancelled',
+          progress: expect.objectContaining({ stage: 'cancelled', percent: 0 }),
+        })
+      )
+    })
+    expect(updateRecordMock).not.toHaveBeenCalledWith(
+      'record-1',
+      expect.objectContaining({ error: 'ComfyUI reported a workflow execution error' })
+    )
+    await vi.waitFor(() =>
+      expect(cancelComfyUIJobMock).toHaveBeenCalledWith(expect.anything(), 'comfy-prompt-cancelled')
+    )
   })
 
   it('persists caller retry metadata before starting the provider request', async () => {

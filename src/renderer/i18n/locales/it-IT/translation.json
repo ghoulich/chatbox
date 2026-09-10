@@ -1538,6 +1538,7 @@
   "The current ComfyUI integration supports text-to-image workflows only.": "L’integrazione ComfyUI attuale supporta solo workflow da testo a immagine.",
   "API workflow only": "Solo workflow API",
   "Active Workflow": "Workflow attivo",
+  "Sampling Steps": "Passaggi di campionamento",
   "CFG Scale": "Scala CFG",
   "Check Workflow Bridge": "Verifica Workflow Bridge",
   "Check the connection first to load checkpoint models.": "Verifica prima la connessione per caricare i modelli checkpoint.",
@@ -1603,5 +1604,16 @@
   "End Percent": "Percentuale finale",
   "ComfyUI workflows currently accept only one reference image.": "I workflow ComfyUI accettano attualmente una sola immagine di riferimento.",
   "The active ComfyUI workflow does not accept a reference image.": "Il workflow ComfyUI attivo non accetta immagini di riferimento.",
-  "The active ComfyUI workflow requires one reference image.": "Il workflow ComfyUI attivo richiede un’immagine di riferimento."
+  "The active ComfyUI workflow requires one reference image.": "Il workflow ComfyUI attivo richiede un’immagine di riferimento.",
+  "Generation Parameters": "Parametri di generazione",
+  "Reset to Workflow Defaults": "Ripristina i valori del workflow",
+  "Recommended workflow: {{name}}": "Workflow consigliato: {{name}}",
+  "Switch Workflow": "Cambia workflow",
+  "Generation cancelled": "Generazione annullata",
+  "Queue position: {{position}}": "Posizione in coda: {{position}}",
+  "Reuse Settings": "Riutilizza impostazioni",
+  "Unable to prepare reference image.": "Impossibile preparare l’immagine di riferimento.",
+  "Reference image optimized to {{width}} × {{height}}.": "Immagine di riferimento ottimizzata a {{width}} × {{height}}.",
+  "The saved ComfyUI workflow is no longer available.": "Il workflow ComfyUI salvato non è più disponibile.",
+  "Missing ComfyUI model: {{name}}": "Modello ComfyUI mancante: {{name}}"
 }

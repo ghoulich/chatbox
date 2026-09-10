@@ -50,8 +50,8 @@ The reproducible native overrides are kept here:
 The decoded build wrapper is intentionally kept outside this Git worktree at
 `../../../chatbox-v1.23.1-apk-build` so thousands of generated files are not mixed
 with the maintained TypeScript changes. The current signed output is
-`../../../chatbox-1.23.1-custom-v497-signed.apk` (`versionName 1.23.1.497`,
-`versionCode 497`). v497 includes the earlier Settings Store crash fix plus
+`../../../chatbox-1.23.1-custom-v502-signed.apk` (`versionName 1.23.1.502`,
+`versionCode 502`). v502 includes the earlier Settings Store crash fix plus
 Android Skills/remote MCP, media and diagram rendering, offline KaTeX,
 session-attachment inline/retrieval selection, native embedding/reranking
 requests, cross-platform automatic attachment routing, and automatic title
@@ -62,13 +62,17 @@ generation with Basic Auth username/password, `Comfy-User` support, a
 multi-workflow library, a form designer for text-to-image/image-to-image/LoRA/
 ControlNet, paired API/UI workflow generation, revision-safe Workflow Bridge
 synchronization, Android reference-image upload, workflow-first dimensions with
-configurable width/height fallbacks, and a default image model.
+configurable width/height fallbacks, and a default image model. Its Phase 3 Lite
+runtime adds workflow-owned basic/advanced parameters, capability recommendations,
+queue/progress/cancellation/recovery state, reproducible workflow/revision/
+parameter/seed metadata with setting reuse, bounded mobile image preprocessing,
+and Android SQLite persistence for ComfyUI metadata and terminal progress.
 Mobile attachment indexing
 additionally retries transient batch failures, saves completed batches as
 checkpoints, resumes from the first missing vector, and distinguishes indexing
 failures from parsing failures in the UI. See the local handoff outside the
 public repository and
-`../../test-evidence/mumu-v497/TEST_REPORT.md` before
+`../../test-evidence/mumu-v502/TEST_REPORT.md` before
 rebuilding.
 
 Security note: trusting a user-installed CA enables HTTPS to servers signed by

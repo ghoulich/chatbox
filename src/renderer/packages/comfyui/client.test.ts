@@ -7,6 +7,7 @@ import {
   normalizeComfyUIEndpoint,
   parseComfyUIWorkflow,
   uploadComfyUIImage,
+  validateComfyUIModels,
 } from './client'
 
 const settings = {
@@ -79,6 +80,57 @@ describe('ComfyUI client helpers', () => {
     expect(workflow['3'].inputs.seed).toBe(500_000_000_000_000)
   })
 
+  it('overrides workflow-owned runtime parameters for one reproducible run', () => {
+    const workflowJson = JSON.parse(settings.workflowJson) as Record<string, { inputs: Record<string, unknown> }>
+    Object.assign(workflowJson['3'].inputs, {
+      cfg: 7,
+      sampler_name: 'euler',
+      scheduler: 'normal',
+      denoise: 1,
+    })
+    const workflow = buildComfyUIPrompt(
+      { ...settings, workflowJson: JSON.stringify(workflowJson) },
+      {
+        prompt: 'runtime',
+        runtimeParameters: {
+          width: 768,
+          height: 640,
+          steps: 32,
+          cfg: 5.5,
+          seed: 123,
+          sampler: 'dpmpp_2m',
+          scheduler: 'karras',
+          denoise: 0.6,
+        },
+      }
+    ) as Record<string, { inputs: Record<string, unknown> }>
+
+    expect(workflow['5'].inputs).toMatchObject({ width: 768, height: 640 })
+    expect(workflow['3'].inputs).toMatchObject({
+      steps: 32,
+      cfg: 5.5,
+      seed: 123,
+      sampler_name: 'dpmpp_2m',
+      scheduler: 'karras',
+      denoise: 0.6,
+    })
+  })
+
+  it('reports missing workflow models before submission', async () => {
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify(['installed.safetensors']), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(['style.safetensors']), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+
+    await expect(
+      validateComfyUIModels(settings, {
+        checkpoint: 'missing.safetensors',
+        lora: 'style.safetensors',
+        controlNet: 'canny.safetensors',
+      })
+    ).resolves.toEqual(['missing.safetensors', 'canny.safetensors'])
+  })
+
   it('reports numeric dimensions detected in the workflow', () => {
     expect(inspectComfyUIWorkflowDimensions(settings.workflowJson, settings.inputMapping)).toEqual({
       width: 512,
@@ -137,7 +189,7 @@ describe('ComfyUI client helpers', () => {
     await expect(
       uploadComfyUIImage({ ...settings, username: 'artist', password: 'secret' }, 'data:image/png;base64,iVBORw0KGgo=')
     ).resolves.toBe('chatbox/input.png')
-    const request = fetchMock.mock.calls[0][1]
+    const request = fetchMock.mock.calls.at(-1)?.[1]
     expect(request?.method).toBe('POST')
     expect(request?.headers).toMatchObject({ Authorization: 'Basic YXJ0aXN0OnNlY3JldA==' })
     expect(request?.body).toBeInstanceOf(FormData)

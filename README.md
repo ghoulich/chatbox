@@ -58,7 +58,7 @@ We regularly sync code from the pro repo to this repo, and vice versa.
 
 This fork is based on the official Chatbox `v1.23.1` source and carries an
 Android-focused secondary-development branch. The current custom build version
-is `1.23.1.497`. It retains the upstream desktop and web code while adding the
+is `1.23.1.502`. It retains the upstream desktop and web code while adding the
 following Android capabilities:
 
 - Read-only Skills directory access through Android SAF, in-chat `load_skill`,
@@ -79,9 +79,12 @@ following Android capabilities:
   image-to-image, optional LoRA, and ControlNet workflows. The companion Workflow
   Bridge synchronizes paired editable UI-format and executable API-format files,
   detects revision conflicts, and keeps normal ComfyUI workflows visible without
-  exposing the broad `/userdata` API. Android reference-image upload, generation
-  polling/cancellation, result download into local history, advanced JSON import,
-  and existing cloud image providers remain available.
+  exposing the broad `/userdata` API. The Phase 3 Lite runtime adds workflow-owned
+  basic/advanced parameter forms, capability recommendations, queue/progress/
+  cancellation/recovery states, reproducible workflow/parameter/seed metadata,
+  one-tap setting reuse, and bounded mobile reference-image preprocessing before
+  upload. Result download into local history, advanced JSON import, and existing
+  cloud image providers remain available.
 - Soul/persona injection for new Android conversations and automatic titles for
   copilot sessions without overwriting titles edited by the user.
 - Local Android network diagnostics, including DNS, ping/TCP/HTTP/TLS, Wi-Fi and
@@ -109,7 +112,7 @@ configuration, and application databases are intentionally not committed.
 
 Implementation notes are in [`custom/android/README.md`](./custom/android/README.md),
 and the latest device/test evidence is in
-[`test-evidence/mumu-v497/TEST_REPORT.md`](./test-evidence/mumu-v497/TEST_REPORT.md).
+[`test-evidence/mumu-v502/TEST_REPORT.md`](./test-evidence/mumu-v502/TEST_REPORT.md).
 The MuMu PDF parser can remain at “Preparing” before indexing; the v491 indexing
 reliability changes were separately verified with a large text attachment on
 MuMu and the same PDF was manually confirmed by the user on a physical phone.
@@ -141,6 +144,14 @@ silently overwriting another client's changes. A workflow created normally in
 ComfyUI must first be opened there and synchronized with **Chatbox Bridge → Sync
 current workflow to ChatBox** before it appears as a managed workflow in Chatbox.
 
+In **Image Creator**, use the workflow button beside the upload action to choose
+the active workflow and edit only the parameters that workflow exposes. Chatbox
+recommends compatible workflows from their declared capabilities, shows queued,
+running, downloading, completed, or cancelled state, and can recover an existing
+ComfyUI prompt after an app restart. Generation history records the workflow
+revision, effective parameters, final seed, and reference-image processing; use
+**Reuse Settings** to reproduce or refine a prior result.
+
 Advanced users can still import or paste API-format JSON. Standard checkpoint,
 prompt, sampler, latent-image, image-loading, LoRA, and ControlNet nodes are
 detected where supported; custom workflows can map inputs with
@@ -162,15 +173,15 @@ ComfyUI's user-scoped storage without exposing the broad `/userdata` API. See
 the extension README for verification, host-mount/container installation,
 Ingress, upgrade, and removal instructions.
 
-### ComfyUI mobile roadmap
+### ComfyUI mobile Phase 3 Lite
 
-The approved next step is a deliberately lightweight Phase 3 rather than a
-mobile clone of ComfyUI's node canvas. Planned work is limited to workflow-owned
-basic/advanced parameter forms, capability-based workflow recommendations,
-queue/progress/cancellation and recovery, reproducible generation metadata, and
-mobile-safe reference-image resizing/upload. Full node-graph editing, unlimited
-LoRA/ControlNet stacks, professional mask editing, and desktop-style batch
-debugging remain out of scope for Android.
+Phase 3 Lite is implemented as a mobile runtime rather than a clone of ComfyUI's
+node canvas. It includes workflow-owned basic/advanced parameter forms,
+capability-based workflow recommendations, queue/progress/cancellation and
+recovery, reproducible generation metadata, and mobile-safe reference-image
+resizing/upload. Full node-graph editing, unlimited LoRA/ControlNet stacks,
+professional mask editing, and desktop-style batch debugging remain out of scope
+for Android.
 
 ## Download
 

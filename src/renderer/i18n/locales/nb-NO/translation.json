@@ -1538,6 +1538,7 @@
   "The current ComfyUI integration supports text-to-image workflows only.": "Den nåværende ComfyUI-integrasjonen støtter bare tekst-til-bilde-arbeidsflyter.",
   "API workflow only": "Bare API-arbeidsflyt",
   "Active Workflow": "Aktiv arbeidsflyt",
+  "Sampling Steps": "Samplingssteg",
   "CFG Scale": "CFG-skala",
   "Check Workflow Bridge": "Kontroller Workflow Bridge",
   "Check the connection first to load checkpoint models.": "Kontroller tilkoblingen først for å laste kontrollpunktmodeller.",
@@ -1603,5 +1604,16 @@
   "End Percent": "Sluttandel",
   "ComfyUI workflows currently accept only one reference image.": "ComfyUI-arbeidsflyter godtar for øyeblikket bare ett referansebilde.",
   "The active ComfyUI workflow does not accept a reference image.": "Den aktive ComfyUI-arbeidsflyten godtar ikke et referansebilde.",
-  "The active ComfyUI workflow requires one reference image.": "Den aktive ComfyUI-arbeidsflyten krever ett referansebilde."
+  "The active ComfyUI workflow requires one reference image.": "Den aktive ComfyUI-arbeidsflyten krever ett referansebilde.",
+  "Generation Parameters": "Genereringsparametere",
+  "Reset to Workflow Defaults": "Tilbakestill til standardverdier for arbeidsflyten",
+  "Recommended workflow: {{name}}": "Anbefalt arbeidsflyt: {{name}}",
+  "Switch Workflow": "Bytt arbeidsflyt",
+  "Generation cancelled": "Genereringen ble avbrutt",
+  "Queue position: {{position}}": "Plass i køen: {{position}}",
+  "Reuse Settings": "Bruk innstillingene på nytt",
+  "Unable to prepare reference image.": "Kan ikke klargjøre referansebildet.",
+  "Reference image optimized to {{width}} × {{height}}.": "Referansebildet er optimalisert til {{width}} × {{height}}.",
+  "The saved ComfyUI workflow is no longer available.": "Den lagrede ComfyUI-arbeidsflyten er ikke lenger tilgjengelig.",
+  "Missing ComfyUI model: {{name}}": "Manglende ComfyUI-modell: {{name}}"
 }

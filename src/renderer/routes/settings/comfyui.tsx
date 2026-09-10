@@ -144,9 +144,17 @@ export function RouteComponent() {
         'height',
         'seed',
         'steps',
+        'cfg',
+        'sampler',
+        'scheduler',
         'batchSize',
         'image',
         'denoise',
+        'loraStrengthModel',
+        'loraStrengthClip',
+        'controlNetStrength',
+        'controlNetStart',
+        'controlNetEnd',
       ])
       if (Object.entries(value).some(([key, item]) => !allowed.has(key) || typeof item !== 'string')) {
         throw new Error(t('Mapping keys or values are invalid.')!)
