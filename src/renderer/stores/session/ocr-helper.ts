@@ -52,6 +52,7 @@ export function getOCRModel(
 export async function ocrImagesInMessages(
   messages: Message[],
   ocrModel: ModelInterface,
+  sessionId: string,
   prompt?: string,
   userQuestionFallback?: string
 ): Promise<void> {
@@ -92,7 +93,7 @@ export async function ocrImagesInMessages(
           { type: 'image' as const, image: imageData },
         ],
       }
-      const chatResult = await ocrModel.chat([ocrMsg], {})
+      const chatResult = await ocrModel.chat([ocrMsg], { sessionId })
       const text = chatResult.contentParts
         .filter((p) => p.type === 'text')
         .map((p) => p.text)

@@ -6,29 +6,6 @@ import { ApiError } from '../../shared/models/errors'
 
 let backgroundGenerationWarningShown = false
 
-function isLockedStreamCancelError(error: unknown): boolean {
-  return (
-    error instanceof TypeError &&
-    (error.message.includes('Cannot cancel a locked stream') ||
-      error.message.includes('ReadableStream is locked') ||
-      error.message.includes('stream is locked'))
-  )
-}
-
-export function cancelReadableStreamOnAbort(stream: ReadableStream<Uint8Array>) {
-  try {
-    void stream.cancel('aborted').catch((error: unknown) => {
-      if (!isLockedStreamCancelError(error)) {
-        console.warn('Failed to cancel native stream', error)
-      }
-    })
-  } catch (error) {
-    if (!isLockedStreamCancelError(error)) {
-      console.warn('Failed to cancel native stream', error)
-    }
-  }
-}
-
 export function isStreamingRequestBody(body: RequestInit['body'] | undefined): body is string {
   if (typeof body !== 'string') return false
   try {
@@ -43,36 +20,24 @@ async function collectNativeResponse(
   method: string,
   headers: Record<string, string>,
   body?: RequestInit['body'],
-  signal?: AbortSignal,
+  signal?: AbortSignal
 ): Promise<Response> {
-  const stream = createNativeReadableStream({
-    url,
-    method,
-    headers,
-    body: typeof body === 'string' ? body : undefined,
+  const stream = createNativeReadableStream(
+    {
+      url,
+      method,
+      headers,
+      body: typeof body === 'string' ? body : undefined,
+    },
+    { signal }
+  )
+  const responseData = await new Response(stream).text()
+  return new Response(responseData, {
+    // The current StreamHttp bridge does not expose response metadata. Model
+    // SDKs still validate and surface JSON error payloads from the provider.
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
   })
-  let removeAbortListener: () => void = () => undefined
-
-  if (signal) {
-    const onAbort = () => cancelReadableStreamOnAbort(stream)
-    if (signal.aborted) onAbort()
-    else {
-      signal.addEventListener('abort', onAbort, { once: true })
-      removeAbortListener = () => signal.removeEventListener('abort', onAbort)
-    }
-  }
-
-  try {
-    const responseData = await new Response(stream).text()
-    return new Response(responseData, {
-      // The current StreamHttp bridge does not expose response metadata. Model
-      // SDKs still validate and surface JSON error payloads from the provider.
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  } finally {
-    removeAbortListener()
-  }
 }
 
 export async function handleMobileRequest(
@@ -80,7 +45,7 @@ export async function handleMobileRequest(
   method: string,
   headers: Headers,
   body?: RequestInit['body'],
-  signal?: AbortSignal,
+  signal?: AbortSignal
 ): Promise<Response> {
   // Fix: Convert Headers to plain object without using .entries()
   const headerObj: Record<string, string> = {}
@@ -99,8 +64,6 @@ export async function handleMobileRequest(
 
       const keepRunningInBackground = settingsStore.getState().backgroundGenerationEnabled !== false
       const backgroundTaskId = `model-stream-${Date.now()}-${Math.random().toString(36).slice(2)}`
-      let removeAbortListener: () => void = () => undefined
-
       const stream = createNativeReadableStream(
         {
           url,
@@ -109,6 +72,7 @@ export async function handleMobileRequest(
           body,
         },
         {
+          signal,
           // Background execution is an enhancement. If a device or OEM policy
           // rejects the foreground service, keep the model stream working in the
           // foreground instead of failing the entire conversation.
@@ -132,10 +96,10 @@ export async function handleMobileRequest(
                       ])
                       toastActions.add(
                         t(
-                          'Background protection could not start. This response will continue only while Chatbox remains active. Check Android battery and notification settings.',
+                          'Background protection could not start. This response will continue only while Chatbox remains active. Check Android battery and notification settings.'
                         ),
                         10000,
-                        { label: t('Settings'), settingsPath: '/settings/chat' },
+                        { label: t('Settings'), settingsPath: '/settings/chat' }
                       )
                     } catch (notificationError) {
                       console.warn('Unable to show background generation warning', notificationError)
@@ -145,23 +109,10 @@ export async function handleMobileRequest(
               }
             : undefined,
           onClose: () => {
-            removeAbortListener()
             if (keepRunningInBackground) return stopBackgroundGeneration(backgroundTaskId)
           },
-        },
+        }
       )
-
-      // Handle abort signal for stream cancellation
-      if (signal) {
-        const onAbort = () => {
-          cancelReadableStreamOnAbort(stream)
-        }
-        if (signal.aborted) onAbort()
-        else {
-          signal.addEventListener('abort', onAbort, { once: true })
-          removeAbortListener = () => signal.removeEventListener('abort', onAbort)
-        }
-      }
 
       // TODO: Once native plugin supports returning status/headers,
       // use them instead of hardcoded values

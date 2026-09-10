@@ -1,10 +1,10 @@
 # Android wrapper overrides
 
-The upstream `v1.23.1` release does not provide a generated Capacitor
+The upstream `v1.23.2` release does not provide a generated Capacitor
 `android/` project or an Android APK asset. The customized APK therefore uses
 the previously validated v1.22.3 custom wrapper and native plugin baseline,
-then replaces its renderer assets with a fresh v1.23.1 mobile build from this
-source tree. Rebase the wrapper when an official v1.23.1 Android artifact or a
+then replaces its renderer assets with a fresh v1.23.2 mobile build from this
+source tree. Rebase the wrapper when an official v1.23.2 Android artifact or a
 complete Android project becomes available.
 
 The reproducible native overrides are kept here:
@@ -49,9 +49,10 @@ The reproducible native overrides are kept here:
 
 The decoded build wrapper is intentionally kept outside this Git worktree at
 `../../../chatbox-v1.23.1-apk-build` so thousands of generated files are not mixed
-with the maintained TypeScript changes. The current signed output is
-`../../../chatbox-1.23.1-custom-v502-signed.apk` (`versionName 1.23.1.502`,
-`versionCode 502`). v502 includes the earlier Settings Store crash fix plus
+with the maintained TypeScript changes. The directory name is historical; its
+current renderer assets are built from v1.23.2. The current signed output is
+`../../../chatbox-1.23.2-custom-v503-signed.apk` (`versionName 1.23.2.503`,
+`versionCode 503`). v503 includes the earlier Settings Store crash fix plus
 Android Skills/remote MCP, media and diagram rendering, offline KaTeX,
 session-attachment inline/retrieval selection, native embedding/reranking
 requests, cross-platform automatic attachment routing, and automatic title
@@ -72,7 +73,7 @@ additionally retries transient batch failures, saves completed batches as
 checkpoints, resumes from the first missing vector, and distinguishes indexing
 failures from parsing failures in the UI. See the local handoff outside the
 public repository and
-`../../test-evidence/mumu-v502/TEST_REPORT.md` before
+`../../test-evidence/mumu-v503/TEST_REPORT.md` before
 rebuilding.
 
 Security note: trusting a user-installed CA enables HTTPS to servers signed by

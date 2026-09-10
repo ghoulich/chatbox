@@ -56,9 +56,9 @@ We regularly sync code from the pro repo to this repo, and vice versa.
 
 ## ghoulich Android Custom Edition
 
-This fork is based on the official Chatbox `v1.23.1` source and carries an
+This fork is based on the official Chatbox `v1.23.2` source and carries an
 Android-focused secondary-development branch. The current custom build version
-is `1.23.1.502`. It retains the upstream desktop and web code while adding the
+is `1.23.2.503`. It retains the upstream desktop and web code while adding the
 following Android capabilities:
 
 - Read-only Skills directory access through Android SAF, in-chat `load_skill`,
@@ -104,7 +104,7 @@ following Android capabilities:
   mobile UI fixes, and complete translations for all custom UI text in the 14
   bundled locales.
 
-The upstream `v1.23.1` snapshot does not contain a complete generated Capacitor
+The upstream `v1.23.2` snapshot does not contain a complete generated Capacitor
 Android project. The APK is currently assembled with the maintained overrides in
 [`custom/android`](./custom/android) and a separately decoded, previously
 validated wrapper. Signing keys, passwords, APK binaries, private model/search
@@ -112,7 +112,7 @@ configuration, and application databases are intentionally not committed.
 
 Implementation notes are in [`custom/android/README.md`](./custom/android/README.md),
 and the latest device/test evidence is in
-[`test-evidence/mumu-v502/TEST_REPORT.md`](./test-evidence/mumu-v502/TEST_REPORT.md).
+[`test-evidence/mumu-v503/TEST_REPORT.md`](./test-evidence/mumu-v503/TEST_REPORT.md).
 The MuMu PDF parser can remain at “Preparing” before indexing; the v491 indexing
 reliability changes were separately verified with a large text attachment on
 MuMu and the same PDF was manually confirmed by the user on a physical phone.

@@ -928,6 +928,7 @@ describe('buildToolsForSession', () => {
   test('agentFullAccess=false requests user_exec approval', async () => {
     const model = createMockModel()
     const result = await buildToolsForSession(model, {
+      sessionId: 'session-1',
       webBrowsing: false,
       messages: [],
       agentMode: 'on',
@@ -947,7 +948,7 @@ describe('buildToolsForSession', () => {
       undefined
     )
     expect(userExecMock).toHaveBeenCalledWith('touch /tmp/needs-approval', {
-      sessionId: undefined,
+      sessionId: 'session-1',
       toolCallId: 'tool-call-2',
       approvalSource: 'ai',
     })

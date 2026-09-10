@@ -11,8 +11,8 @@
 
 ## ghoulich Android 二开版
 
-本 fork 以官方 Chatbox `v1.23.1` 为基线，当前二开版本为
-`1.23.1.502`。在保留上游桌面端和 Web 代码的同时，Android 端增加：
+本 fork 以官方 Chatbox `v1.23.2` 为基线，当前二开版本为
+`1.23.2.503`。在保留上游桌面端和 Web 代码的同时，Android 端增加：
 
 - 通过 Android SAF 只读扫描 Skills，在对话中调用 `load_skill`，并在
   Android 对话模式中启用 Skills 与远程 HTTP/SSE MCP；
@@ -41,12 +41,12 @@
 - Android 文档导出、用户 CA（仍校验主机名）、移动界面修复，以及全部二开
   UI 文本在内置 14 种语言中的翻译。
 
-官方 `v1.23.1` 快照不包含完整的 Capacitor Android 工程。本项目当前通过
+官方 `v1.23.2` 快照不包含完整的 Capacitor Android 工程。本项目当前通过
 [`custom/android`](../custom/android) 中维护的覆盖文件和仓库外单独保存的
 已验证壳组装 APK。签名证书、口令、APK、私人模型/搜索配置和应用数据库不会
 提交到仓库。实现说明见 [`custom/android/README.md`](../custom/android/README.md)，
 最新设备测试见
-[`test-evidence/mumu-v502/TEST_REPORT.md`](../test-evidence/mumu-v502/TEST_REPORT.md)。
+[`test-evidence/mumu-v503/TEST_REPORT.md`](../test-evidence/mumu-v503/TEST_REPORT.md)。
 
 ### Firecrawl 配置
 

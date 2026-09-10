@@ -1,4 +1,5 @@
-import { describe, expect, test, vi } from 'vitest'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
+import { createNativeReadableStream } from '@/native/stream-http'
 
 const {
   backgroundStartMock,
@@ -27,7 +28,7 @@ vi.mock('@/native/stream-http', () => ({
     (_options: unknown, lifecycle: { onStart?: () => void | Promise<void>; onClose?: () => void }) => {
       streamLifecycle.current = lifecycle
       return new ReadableStream<Uint8Array>()
-    },
+    }
   ),
 }))
 vi.mock('@/stores/settingsStore', () => ({
@@ -35,7 +36,7 @@ vi.mock('@/stores/settingsStore', () => ({
 }))
 vi.mock('@/stores/toastActions', () => ({ add: toastAddMock }))
 
-import { cancelReadableStreamOnAbort, handleMobileRequest, isStreamingRequestBody } from './mobile-request'
+import { handleMobileRequest, isStreamingRequestBody } from './mobile-request'
 
 describe('mobile streaming request detection', () => {
   test('recognizes only JSON bodies with stream explicitly enabled', () => {
@@ -55,7 +56,7 @@ describe('optional background generation service', () => {
       'https://model.example/v1/chat/completions',
       'POST',
       new Headers(),
-      JSON.stringify({ stream: true, messages: [] }),
+      JSON.stringify({ stream: true, messages: [] })
     )
 
     await expect(streamLifecycle.current?.onStart?.()).resolves.toBeUndefined()
@@ -68,33 +69,65 @@ describe('optional background generation service', () => {
   })
 })
 
-describe('mobile request stream cancellation', () => {
-  test('swallows locked stream cancel rejections', async () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
-    const stream = new ReadableStream<Uint8Array>()
-    const reader = stream.getReader()
-
-    cancelReadableStreamOnAbort(stream)
-    await Promise.resolve()
-    await Promise.resolve()
-
-    expect(warnSpy).not.toHaveBeenCalled()
-    reader.releaseLock()
-    warnSpy.mockRestore()
+describe('mobile request native streaming', () => {
+  beforeEach(() => {
+    vi.mocked(createNativeReadableStream).mockReset()
+    vi.mocked(createNativeReadableStream).mockImplementation((_options, lifecycle) => {
+      streamLifecycle.current = lifecycle
+      return new ReadableStream<Uint8Array>()
+    })
   })
 
-  test('logs unexpected cancel failures', async () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
-    const stream = {
-      cancel: vi.fn().mockRejectedValue(new Error('boom')),
-    } as Pick<ReadableStream<Uint8Array>, 'cancel'> as ReadableStream<Uint8Array>
+  test('passes the request signal directly to the native stream', async () => {
+    const abortController = new AbortController()
 
-    cancelReadableStreamOnAbort(stream)
-    await Promise.resolve()
-    await Promise.resolve()
+    await handleMobileRequest(
+      'https://example.com/stream',
+      'POST',
+      new Headers({ Authorization: 'Bearer test' }),
+      JSON.stringify({ stream: true }),
+      abortController.signal
+    )
 
-    expect(warnSpy).toHaveBeenCalledWith('Failed to cancel native stream', expect.any(Error))
-    warnSpy.mockRestore()
+    expect(createNativeReadableStream).toHaveBeenCalledWith(
+      {
+        url: 'https://example.com/stream',
+        method: 'POST',
+        headers: {
+          Accept: 'text/event-stream',
+          authorization: 'Bearer test',
+        },
+        body: JSON.stringify({ stream: true }),
+      },
+      expect.objectContaining({ signal: abortController.signal })
+    )
+  })
+
+  test('passes an already-aborted signal to native stream setup', async () => {
+    const abortController = new AbortController()
+    abortController.abort(123_456)
+
+    await handleMobileRequest(
+      'https://example.com/stream',
+      'POST',
+      new Headers(),
+      JSON.stringify({ stream: true }),
+      abortController.signal
+    )
+
+    expect(createNativeReadableStream).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ signal: abortController.signal })
+    )
+  })
+
+  test('passes an explicit undefined signal to native stream setup', async () => {
+    await handleMobileRequest('https://example.com/stream', 'POST', new Headers(), JSON.stringify({ stream: true }))
+
+    expect(createNativeReadableStream).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ signal: undefined })
+    )
   })
 })
 
@@ -108,27 +141,30 @@ describe('mobile buffered request fallback', () => {
           controller.enqueue(new TextEncoder().encode('{"data":[{"embedding":[1,2,3]}]}'))
           controller.close()
         },
-      }),
+      })
     )
 
     const response = await handleMobileRequest(
       'https://private-model.example/v1/embeddings',
       'POST',
       new Headers({ 'Content-Type': 'application/json' }),
-      JSON.stringify({ input: ['hello'] }),
+      JSON.stringify({ input: ['hello'] })
     )
 
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual({ data: [{ embedding: [1, 2, 3] }] })
-    expect(nativeStreamMock).toHaveBeenCalledWith({
-      url: 'https://private-model.example/v1/embeddings',
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: '{"input":["hello"]}',
-    })
+    expect(nativeStreamMock).toHaveBeenCalledWith(
+      {
+        url: 'https://private-model.example/v1/embeddings',
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{"input":["hello"]}',
+      },
+      { signal: undefined }
+    )
     expect(warnSpy).toHaveBeenCalledWith(
       'Buffered CapacitorHttp request failed; retrying through native HTTP',
-      expect.any(TypeError),
+      expect.any(TypeError)
     )
     warnSpy.mockRestore()
   })
@@ -142,19 +178,19 @@ describe('mobile buffered request fallback', () => {
           controller.enqueue(new TextEncoder().encode('{"data":[]}'))
           controller.close()
         },
-      }),
+      })
     )
 
     const response = await handleMobileRequest(
       'https://private-model.example/v1/embeddings',
       'POST',
       new Headers({ 'Content-Type': 'application/json' }),
-      '{}',
+      '{}'
     )
 
     await expect(response.json()).resolves.toEqual({ data: [] })
     expect(warnSpy).toHaveBeenCalledWith(
-      'Buffered CapacitorHttp request returned status 0; retrying through native HTTP',
+      'Buffered CapacitorHttp request returned status 0; retrying through native HTTP'
     )
     warnSpy.mockRestore()
   })

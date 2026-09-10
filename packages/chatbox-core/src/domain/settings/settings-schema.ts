@@ -196,6 +196,9 @@ export const GlobalSessionSettingsSchema = z.object({
 export const SessionSettingsSchema = GlobalSessionSettingsSchema.extend({
   provider: z.string().optional().catch(undefined),
   modelId: z.string().optional().catch(undefined),
+  // Claude prompt caching uses the provider default when omitted. Persist only
+  // explicit overrides here so reasoning option updates cannot clear them.
+  claudePromptCacheTTL: z.enum(['5m', '1h']).optional().catch(undefined),
   dalleStyle: z.enum(['vivid', 'natural']).optional().catch('vivid'),
   imageGenerateNum: z.number().optional().catch(1),
   // Legacy shared reasoning options; no longer read (superseded by
@@ -394,9 +397,18 @@ const MCPServerConfigSchema = z.object({
   transport: MCPTransportConfigSchema,
 })
 
+// Per-server OAuth state written by the MCP client during the authorization flow.
+// Payload shapes are owned by @modelcontextprotocol/client, so they are stored opaquely.
+const MCPOAuthStateSchema = z.object({
+  clientInformation: z.record(z.string(), z.unknown()).optional(),
+  tokens: z.record(z.string(), z.unknown()).optional(),
+  codeVerifier: z.string().optional(),
+})
+
 const MCPSettingsSchema = z.object({
   servers: z.array(MCPServerConfigSchema),
   enabledBuiltinServers: z.array(z.string()),
+  oauth: z.record(z.string(), MCPOAuthStateSchema).optional().catch(undefined),
 })
 
 const VibedropPublicationSchema = z.object({
@@ -724,6 +736,7 @@ export const SettingsSchema = GlobalSessionSettingsSchema.extend({
 
   autoCompaction: z.boolean().default(true),
   compactionThreshold: z.number().min(0.4).max(0.9).default(0.6),
+  compactionPrompt: z.string().optional(),
 
   // Global default for the tool-call-limit confirmation. Individual sessions
   // can override it via SessionSettingsSchema.pauseOnToolCallLimit.
@@ -789,6 +802,7 @@ export type ShortcutSetting = z.infer<typeof ShortcutSettingSchema>
 export type ExtensionSettings = z.infer<typeof ExtensionSettingsSchema>
 export type MCPTransportConfig = z.infer<typeof MCPTransportConfigSchema>
 export type MCPServerConfig = z.infer<typeof MCPServerConfigSchema>
+export type MCPOAuthState = z.infer<typeof MCPOAuthStateSchema>
 export type MCPSettings = z.infer<typeof MCPSettingsSchema>
 export type NetworkToolsSettings = z.infer<typeof NetworkToolsSettingsSchema>
 

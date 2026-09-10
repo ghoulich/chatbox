@@ -1,3 +1,4 @@
+import { selectContextMessages } from '@shared/context'
 import { describe, expect, test, vi } from 'vitest'
 import type { LoggerPort } from '../../ports'
 import type { Message, Session, SessionSettings, Settings } from '../../types'
@@ -9,6 +10,7 @@ function message(id: string, role: Message['role']): Message {
 
 function createHarness(
   options: {
+    compactionPrompt?: string
     autoCompaction?: boolean
     beforeUpdate?: (session: Session) => Session
     logger?: LoggerPort
@@ -36,9 +38,13 @@ function createHarness(
   }
   const globalSettings = {
     language: 'en',
+    compactionPrompt: options.compactionPrompt,
     autoCompaction: true,
     defaultChatModel: { provider: 'openai', model: 'gpt-4.1' },
   } as Settings
+  const getCompactionContext = vi.fn(
+    (current: Session, _settings: SessionSettings, _pendingMessage?: Message) => current.messages
+  )
   const shouldCompact = vi.fn(() => Promise.resolve(true))
   const generate = vi.fn(
     (input: {
@@ -61,7 +67,7 @@ function createHarness(
     settings: { getSettings: () => globalSettings },
     policy: {
       shouldCompact,
-      getCompactionContext: (current: Session) => current.messages,
+      getCompactionContext,
     },
     summaries: { generate },
     logger: options.logger,
@@ -70,6 +76,7 @@ function createHarness(
   })
   return {
     service,
+    getCompactionContext,
     shouldCompact,
     generate,
     get session() {
@@ -79,6 +86,22 @@ function createHarness(
 }
 
 describe('CompactionService', () => {
+  test('uses the saved prompt for automatic compaction', async () => {
+    const harness = createHarness({ compactionPrompt: 'Preserve decisions and file paths.' })
+    await harness.service.run('session-1')
+    expect(harness.generate).toHaveBeenCalledWith(
+      expect.objectContaining({ prompt: 'Preserve decisions and file paths.' })
+    )
+  })
+
+  test('keeps a manual prompt override scoped to one run', async () => {
+    const harness = createHarness({ compactionPrompt: 'Saved instructions' })
+    await harness.service.run('session-1', { force: true, prompt: 'One-time instructions' })
+    expect(harness.generate).toHaveBeenLastCalledWith(expect.objectContaining({ prompt: 'One-time instructions' }))
+    await harness.service.run('session-1', { force: true })
+    expect(harness.generate).toHaveBeenLastCalledWith(expect.objectContaining({ prompt: 'Saved instructions' }))
+  })
+
   test('appends a summary and exact boundary through an atomic Session update', async () => {
     const harness = createHarness()
     const streamUpdates: string[] = []
@@ -89,6 +112,7 @@ describe('CompactionService', () => {
 
     expect(result).toMatchObject({ success: true, compacted: true })
     expect(streamUpdates).toEqual(['streaming summary'])
+    expect(harness.generate).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 'session-1' }))
     expect(harness.session.messages.at(-1)).toMatchObject({ role: 'assistant', isSummary: true })
     expect(harness.session.compactionPoints).toEqual([
       {
@@ -99,7 +123,20 @@ describe('CompactionService', () => {
     ])
   })
 
-  test('keeps the last rounds raw and summarizes only up to the boundary, with tool calls flattened', async () => {
+  test('uses the pending turn for the threshold without including it in the summary boundary', async () => {
+    const harness = createHarness()
+    const pendingMessage = message('pending-user', 'user')
+
+    await harness.service.run('session-1', { pendingMessage })
+
+    expect(harness.shouldCompact).toHaveBeenCalledWith(expect.objectContaining({ pendingMessage }))
+    expect(harness.getCompactionContext).toHaveBeenCalledWith(expect.any(Object), expect.any(Object), pendingMessage)
+    expect(harness.generate.mock.calls[0]?.[0]).toMatchObject({
+      messages: expect.not.arrayContaining([pendingMessage]),
+    })
+  })
+
+  test('summarizes through the latest message with tool calls flattened', async () => {
     const toolMessage: Message = {
       id: 'a1',
       role: 'assistant',
@@ -129,13 +166,12 @@ describe('CompactionService', () => {
     const result = await harness.service.run('session-1', { force: true })
 
     expect(result).toMatchObject({ success: true, compacted: true })
-    // Boundary sits before the last two rounds; the summary is inserted right after it.
-    expect(harness.session.compactionPoints?.[0]).toMatchObject({ boundaryMessageId: 'a1' })
-    expect(harness.session.messages.map((m) => m.id)).toEqual(['u1', 'a1', 'summary-message', 'u2', 'a2', 'u3', 'a3'])
+    expect(harness.session.compactionPoints?.[0]).toMatchObject({ boundaryMessageId: 'a3' })
+    expect(harness.session.messages.map((m) => m.id)).toEqual(['u1', 'a1', 'u2', 'a2', 'u3', 'a3', 'summary-message'])
 
     // The summarizer saw only the covered range, with the tool call flattened to text.
     const summaryInput = harness.generate.mock.calls[0][0] as unknown as { messages: Message[] }
-    expect(summaryInput.messages.map((m) => m.id)).toEqual(['u1', 'a1'])
+    expect(summaryInput.messages.map((m) => m.id)).toEqual(['u1', 'a1', 'u2', 'a2', 'u3', 'a3'])
     const flattenedParts = summaryInput.messages[1].contentParts ?? []
     expect(flattenedParts.some((part) => part.type === 'tool-call')).toBe(false)
     expect(
@@ -145,11 +181,7 @@ describe('CompactionService', () => {
     ).toBe(true)
   })
 
-  test('caps how much one compaction covers instead of truncating the summary input', async () => {
-    // 130 rounds = 260 messages. The rounds-based boundary would cover 256 of
-    // them, more than one summary can faithfully absorb — so the boundary is
-    // capped at the first 200 messages and the summarizer sees exactly the
-    // covered range. The rest converges over later compactions.
+  test('covers the latest message in histories longer than 200 messages', async () => {
     const messages: Message[] = []
     for (let round = 1; round <= 130; round += 1) {
       messages.push(message(`u${round}`, 'user'))
@@ -160,10 +192,37 @@ describe('CompactionService', () => {
     const result = await harness.service.run('session-1', { force: true })
 
     expect(result).toMatchObject({ success: true, compacted: true })
-    expect(harness.session.compactionPoints?.[0]).toMatchObject({ boundaryMessageId: 'a100' })
+    expect(harness.session.compactionPoints?.[0]).toMatchObject({ boundaryMessageId: 'a130' })
     const summaryInput = harness.generate.mock.calls[0][0] as unknown as { messages: Message[] }
-    expect(summaryInput.messages).toHaveLength(200)
-    expect(summaryInput.messages.at(-1)?.id).toBe('a100')
+    expect(summaryInput.messages).toHaveLength(260)
+    expect(summaryInput.messages.at(-1)?.id).toBe('a130')
+  })
+
+  test.each([false, true])('preserves messages arriving during compaction (force=%s)', async (force) => {
+    const messages = Array.from({ length: 4 }, (_, index) => [
+      message(`u${index + 1}`, 'user'),
+      message(`a${index + 1}`, 'assistant'),
+    ]).flat()
+    const harness = createHarness({
+      messages: [message('system', 'system'), ...messages],
+      beforeUpdate: (session) => ({
+        ...session,
+        messages: [...session.messages, message('new-user', 'user')],
+      }),
+    })
+
+    await expect(harness.service.run('session-1', { force })).resolves.toMatchObject({
+      success: true,
+      compacted: true,
+    })
+    expect(harness.session.compactionPoints?.[0].boundaryMessageId).toBe('a4')
+    expect(
+      selectContextMessages(harness.session.messages, {
+        compactionPoints: harness.session.compactionPoints,
+      }).map((item) => item.id)
+    ).toEqual(['system', 'summary-message', 'new-user'])
+    const summaryInput = harness.generate.mock.calls[0][0] as unknown as { messages: Message[] }
+    expect(summaryInput.messages.map((item) => item.id)).toEqual(['system', ...messages.map((item) => item.id)])
   })
 
   test('honors the per-session auto-compaction override before invoking policy', async () => {

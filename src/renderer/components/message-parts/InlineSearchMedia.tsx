@@ -79,6 +79,19 @@ export const InlineImageSearchResult: FC<{ result: ImageSearchResultItem }> = ({
           <span className="block truncate text-sm font-semibold text-chatbox-tint-primary">{result.title}</span>
           <span className="block text-xs text-chatbox-tint-secondary">{t('Image unavailable')}</span>
         </span>
+        <a
+          href={result.imageUrl}
+          target="_blank"
+          rel="noreferrer"
+          aria-label={result.imageUrl}
+          className="shrink-0 text-xs text-chatbox-tint-brand"
+          onClick={(event) => {
+            event.preventDefault()
+            void platform.openLink(result.imageUrl)
+          }}
+        >
+          {t('View Image')}
+        </a>
         <button
           type="button"
           className="shrink-0 cursor-pointer border-0 bg-transparent p-0 text-xs text-chatbox-tint-brand"

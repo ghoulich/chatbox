@@ -1,7 +1,6 @@
 import { CapacitorHttp } from '@capacitor/core'
 import type { FetchLike } from '@modelcontextprotocol/sdk/shared/transport.js'
 import { createNativeReadableStream } from '@/native/stream-http'
-import { cancelReadableStreamOnAbort } from '@/utils/mobile-request'
 
 function toUrl(input: string | URL): string {
   return input.toString()
@@ -52,12 +51,7 @@ export function createMobileMcpFetch(): FetchLike {
 
     const acceptsEventStream = headers.accept?.toLowerCase().includes('text/event-stream') === true
     if (method === 'GET' && acceptsEventStream) {
-      const stream = createNativeReadableStream({ url, method, headers })
-      if (signal) {
-        const onAbort = () => cancelReadableStreamOnAbort(stream)
-        if (signal.aborted) onAbort()
-        else signal.addEventListener('abort', onAbort, { once: true })
-      }
+      const stream = createNativeReadableStream({ url, method, headers }, { signal: signal ?? undefined })
       return new Response(stream, {
         status: 200,
         headers: {

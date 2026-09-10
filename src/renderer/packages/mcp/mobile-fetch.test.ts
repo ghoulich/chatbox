@@ -69,11 +69,14 @@ describe('createMobileMcpFetch', () => {
     })
 
     expect(capacitorRequest).not.toHaveBeenCalled()
-    expect(createStream).toHaveBeenCalledWith({
-      url: 'https://mcp.example.test/mcp',
-      method: 'GET',
-      headers: { accept: 'text/event-stream', 'mcp-session-id': 'session-1' },
-    })
+    expect(createStream).toHaveBeenCalledWith(
+      {
+        url: 'https://mcp.example.test/mcp',
+        method: 'GET',
+        headers: { accept: 'text/event-stream', 'mcp-session-id': 'session-1' },
+      },
+      { signal: undefined }
+    )
     expect(response.headers.get('content-type')).toBe('text/event-stream')
     expect(await response.text()).toContain('data:')
   })
