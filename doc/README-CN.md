@@ -94,6 +94,22 @@ Chatbox 只显示该工作流声明的基础/高级参数，根据文生图、�
 第三阶段 Lite 不包含完整拖拽节点画布、无限 LoRA/ControlNet 叠加、专业蒙版编辑器
 或桌面式批量调试器，这些能力继续留在 ComfyUI 页面使用。
 
+### 最近一次 ComfyUI 回归（2026-09-23）
+
+服务端删除旧模型和工作流并换成新内容后，已在 MuMu 上使用 Android
+`1.23.2.503` 重新回归。Workflow Bridge `0.1.0` 能发现并拉取两个新的受管文生图
+工作流 `unholy_anima` 和 `unholy_illustrious`。`unholy_illustrious` 实际生成了
+832×1216 图片；Chatbox 能完成下载、主视图显示、历史记录落库，并在冷启动后恢复，
+工作流切换和 Basic Auth 也都正常。
+
+`unholy_anima` 同样在服务端执行成功，832×1216 输出也能走完移动端下载和历史记录
+流程，但图片内容为噪点，未达到可用质量。这属于该工作流/模型组合的推理质量问题，
+不是 Bridge 或 Android 网络链路故障：当前同步的 API 图把 Anima UNet 与
+Qwen-Image 编码器/VAE 直接连接到普通采样器。应先在 ComfyUI 中补齐并验证该模型
+需要的采样/模型修正，再同步新修订。ComfyUI 相关源码定向测试为 30/30 通过；详细
+清单和证据见
+[`test-evidence/mumu-v503/TEST_REPORT.md`](../test-evidence/mumu-v503/TEST_REPORT.md)。
+
 ### 下载电脑端
 
 <table style="width: 100%">

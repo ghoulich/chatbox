@@ -183,6 +183,25 @@ resizing/upload. Full node-graph editing, unlimited LoRA/ControlNet stacks,
 professional mask editing, and desktop-style batch debugging remain out of scope
 for Android.
 
+### Latest ComfyUI regression (2026-09-23)
+
+The Android `1.23.2.503` build was revalidated on MuMu after the server's prior
+models and workflows were replaced. Workflow Bridge `0.1.0` discovered and
+pulled the two new managed text-to-image workflows, `unholy_anima` and
+`unholy_illustrious`. `unholy_illustrious` completed a real 832×1216 generation,
+and Chatbox downloaded, displayed, persisted, and restored the result after a
+cold restart. Both workflow selection and Basic Auth remained functional.
+
+`unholy_anima` also completed on the server and its 832×1216 output followed the
+same mobile download/history path, but the generated image was noise rather than
+a usable result. This is an inference-quality failure in that workflow/model
+combination, not a Bridge or Android transport failure: its synchronized API
+graph currently connects the Anima UNet and Qwen-Image encoder/VAE directly to a
+plain sampler. Review the sampling/model-patch requirements in ComfyUI, verify a
+good result there, then synchronize a new revision. The focused ComfyUI source
+suite remains green at 30/30 tests. Full evidence and the exact inventory are in
+[`test-evidence/mumu-v503/TEST_REPORT.md`](./test-evidence/mumu-v503/TEST_REPORT.md).
+
 ## Download
 
 ### Desktop

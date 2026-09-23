@@ -78,3 +78,61 @@ Screens that exposed private service configuration were intentionally excluded f
 - The user previously confirmed the target PDF can index on a physical phone, but this v503 pass did not repeat physical-phone testing.
 - No compatible LoRA or ControlNet model was available for real inference. Their schemas, forms and node mappings remain covered by automated tests; SD 1.5 text-to-image was exercised end to end.
 - SSH/SNMP devices, negative user-CA/hostname cases, long background streams and sustained low-memory/WebGL stress require controlled external environments and remain release-matrix work.
+
+## ComfyUI replacement-inventory regression (2026-09-23 UTC)
+
+The server's previous ComfyUI models and workflows had been removed and replaced,
+so this pass discarded the earlier inventory and queried the live server again.
+No endpoint, username, password, token, or private application database is stored
+in this report.
+
+### Live inventory
+
+- Workflow Bridge health: `ok`, version `0.1.0`, maximum workflow body 10 MiB.
+- Managed workflows: `unholy_anima` and `unholy_illustrious`, both revision 1 and
+  both declaring text-to-image capability.
+- The two native source files also appear as unmanaged workflows. This is expected:
+  Bridge synchronization creates managed copies and does not overwrite or delete
+  the original native ComfyUI saves.
+- Checkpoint: `unholyDesireMixSinister_v80.safetensors`.
+- Diffusion model: `anima_aesthetic_v1.1.safetensors`.
+- Text encoder: `qwen_3_06b_base.safetensors`.
+- VAE: `qwen_image_vae.safetensors`.
+- No LoRA models were present.
+- The ComfyUI queue was empty before the test.
+
+### MuMu end-to-end results
+
+- **Bridge refresh and pull passed.** Chatbox retained the old local-only workflow
+  instead of silently deleting it, discovered both new remote workflows, pulled
+  each revision, and changed the active workflow without a restart.
+- **`unholy_illustrious` passed.** Chatbox submitted prompt
+  `8cd459ec-31d8-4003-8153-ff86f2280856`; ComfyUI reported success in about
+  11.8 seconds. The returned PNG is 832×1216 and 1,030,429 bytes. Chatbox completed
+  its download state, displayed the image in the main result view, and added the
+  thumbnail to local history.
+- **`unholy_anima` passed transport/runtime but failed output quality.** ComfyUI
+  completed prompt `8c408bed-b292-49a8-b0a1-6e285356936f`; the returned PNG is
+  832×1216 and 1,975,760 bytes. Chatbox completed progress, download, display and
+  history persistence, but the image is visual noise. The synchronized nine-node
+  graph uses `UNETLoader` + Qwen-Image `CLIPLoader` + `VAELoader` and connects the
+  model directly to a plain `KSampler`. The workflow/model sampling requirements
+  should be corrected and validated in ComfyUI, then synchronized as a new
+  revision. No Chatbox source change is indicated by this result.
+- **Cold restart passed.** The image history and selected workflow survived an
+  Android force-stop/relaunch. The final active workflow was restored to the
+  known-good `unholy_illustrious` profile.
+- **Runtime health passed.** Filtered Android logs contained no application fatal
+  exception or Chromium JavaScript `TypeError`/`ReferenceError` after the refresh,
+  two generations and cold restart.
+
+### Source verification
+
+The focused source suite passed 30/30 tests across:
+
+- `src/renderer/packages/comfyui/bridge-client.test.ts`
+- `src/renderer/packages/comfyui/client.test.ts`
+- `src/renderer/packages/comfyui/image-preprocess.test.ts`
+- `src/renderer/packages/comfyui/workflows.test.ts`
+
+This pass changed documentation only; no APK rebuild was required.
