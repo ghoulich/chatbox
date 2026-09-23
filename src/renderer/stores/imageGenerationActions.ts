@@ -26,6 +26,7 @@ import storage from '@/storage'
 import { StorageKeyGenerator } from '@/storage/StoreStorage'
 import { COMFYUI_IMAGE_PROVIDER_ID, COMFYUI_WORKFLOW_MODEL_ID } from '@/packages/comfyui/constants'
 import { activateWorkflow, getComfyUIRuntimeDefaults } from '@/packages/comfyui/workflows'
+import { startBackgroundGeneration, stopBackgroundGeneration } from '@/native/background-generation'
 import { trackEvent } from '@/utils/track'
 import {
   addGeneratedImage,
@@ -46,6 +47,29 @@ let currentAbortController: AbortController | null = null
 let currentComfyUIJob: { promptId: string; recordId: string } | null = null
 let currentComfyUIRecordId: string | null = null
 const cancelledComfyUIRecordIds = new Set<string>()
+
+async function startImageGenerationBackgroundTask(recordId: string): Promise<string | undefined> {
+  if (settingsStore.getState().backgroundGenerationEnabled === false) return undefined
+  const taskId = `image-generation-${recordId}`
+  try {
+    await startBackgroundGeneration(taskId)
+    return taskId
+  } catch (error) {
+    // Background protection is an enhancement. A notification/OEM policy
+    // failure must not prevent generation while Chatbox remains in the foreground.
+    log.warn('Unable to protect image generation in the background:', error)
+    return undefined
+  }
+}
+
+async function stopImageGenerationBackgroundTask(taskId: string | undefined): Promise<void> {
+  if (!taskId) return
+  try {
+    await stopBackgroundGeneration(taskId)
+  } catch (error) {
+    log.warn('Unable to stop image-generation background protection:', error)
+  }
+}
 
 function getLicenseKey(): string {
   const licenseKey = settingsStore.getState().licenseKey
@@ -214,7 +238,9 @@ export async function startImageGeneration(
       : shouldUseAsyncPath(params.model.provider)
         ? generateImages
         : generateImagesDirect
-  const generation = generateFn(record.id, params).finally(() => {
+  const backgroundTaskId = await startImageGenerationBackgroundTask(record.id)
+  const generation = generateFn(record.id, params).finally(async () => {
+    await stopImageGenerationBackgroundTask(backgroundTaskId)
     imageGenerationStore.getState().setCurrentGeneratingId(null)
     queryClient.invalidateQueries({ queryKey: [IMAGE_GEN_LIST_QUERY_KEY] })
   })
@@ -698,6 +724,7 @@ export async function resumeGeneration(recordId: string): Promise<ImageGeneratio
 
   if (record.model.provider === COMFYUI_IMAGE_PROVIDER_ID) {
     store.setCurrentGeneratingId(recordId)
+    const backgroundTaskId = await startImageGenerationBackgroundTask(recordId)
     currentAbortController = new AbortController()
     currentComfyUIRecordId = recordId
     currentComfyUIJob = { promptId: record.taskId, recordId }
@@ -733,6 +760,7 @@ export async function resumeGeneration(recordId: string): Promise<ImageGeneratio
       if (failed) queryClient.setQueryData([IMAGE_GEN_QUERY_KEY, failed.id], failed)
       return failed
     } finally {
+      await stopImageGenerationBackgroundTask(backgroundTaskId)
       currentAbortController = null
       currentComfyUIJob = null
       currentComfyUIRecordId = null
@@ -743,6 +771,7 @@ export async function resumeGeneration(recordId: string): Promise<ImageGeneratio
 
   const licenseKey = getLicenseKey()
   store.setCurrentGeneratingId(recordId)
+  const backgroundTaskId = await startImageGenerationBackgroundTask(recordId)
 
   // Create AbortController for resume operation
   currentAbortController = new AbortController()
@@ -797,6 +826,7 @@ export async function resumeGeneration(recordId: string): Promise<ImageGeneratio
     }
     return failedRecord
   } finally {
+    await stopImageGenerationBackgroundTask(backgroundTaskId)
     currentAbortController = null
     imageGenerationStore.getState().setCurrentGeneratingId(null)
     queryClient.invalidateQueries({ queryKey: [IMAGE_GEN_LIST_QUERY_KEY] })
@@ -859,7 +889,9 @@ export async function retryGeneration(recordId: string): Promise<void> {
       : shouldUseAsyncPath(params.model.provider)
         ? generateImages
         : generateImagesDirect
-  void generateFn(recordId, params).finally(() => {
+  const backgroundTaskId = await startImageGenerationBackgroundTask(recordId)
+  void generateFn(recordId, params).finally(async () => {
+    await stopImageGenerationBackgroundTask(backgroundTaskId)
     imageGenerationStore.getState().setCurrentGeneratingId(null)
     queryClient.invalidateQueries({ queryKey: [IMAGE_GEN_LIST_QUERY_KEY] })
   })

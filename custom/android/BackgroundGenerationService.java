@@ -17,7 +17,7 @@ import java.util.HashSet;
 import java.util.Locale;
 import java.util.Set;
 
-/** Keeps the process and CPU alive only while user-initiated model streams are active. */
+/** Keeps the process and CPU alive while user-initiated model or image generation is active. */
 public class BackgroundGenerationService extends Service {
     private static final String TAG = "ChatboxBackground";
     private static volatile BackgroundGenerationService runningInstance;

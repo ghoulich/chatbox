@@ -528,14 +528,48 @@ async function downloadImage(
       CapacitorHttp.request({ url, method: 'GET', headers: requestHeaders, responseType: 'blob' }),
       signal
     )
-    if (response.status < 200 || response.status >= 300) throw new Error(`ComfyUI returned HTTP ${response.status}`)
+    if (response.status < 200 || response.status >= 300) {
+      throw new ComfyUIRequestError(`ComfyUI returned HTTP ${response.status}`, response.status, response.data)
+    }
     if (typeof response.data !== 'string') throw new Error('ComfyUI returned an invalid image')
     return response.data.startsWith('data:') ? response.data : `data:image/png;base64,${response.data}`
   }
 
   const response = await fetch(url, { headers: requestHeaders, signal })
-  if (!response.ok) throw new Error(`ComfyUI returned HTTP ${response.status}`)
+  if (!response.ok) {
+    throw new ComfyUIRequestError(`ComfyUI returned HTTP ${response.status}`, response.status)
+  }
   return blobToDataUrl(await response.blob())
+}
+
+function isRetriableComfyUIRequest(error: unknown): boolean {
+  if (error instanceof DOMException && error.name === 'AbortError') return false
+  if (error instanceof ComfyUIRequestError) {
+    return (
+      error.status === 0 || error.status === 408 || error.status === 425 || error.status === 429 || error.status >= 500
+    )
+  }
+  // Native HTTP rejects with a plain Error when Android temporarily suspends
+  // or changes the active network while the screen is off.
+  return error instanceof Error
+}
+
+async function downloadImageWithRetry(
+  settings: ComfyUISettings,
+  descriptor: ComfyUIImageDescriptor,
+  signal?: AbortSignal
+): Promise<string> {
+  const retryDelays = [500, 1_000, 2_000, 4_000]
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await downloadImage(settings, descriptor, signal)
+    } catch (error) {
+      if (signal?.aborted) throw signal.reason ?? new DOMException('Aborted', 'AbortError')
+      const delay = retryDelays[attempt]
+      if (delay === undefined || !isRetriableComfyUIRequest(error)) throw error
+      await abortable(new Promise((resolve) => setTimeout(resolve, delay)), signal)
+    }
+  }
 }
 
 export async function generateWithComfyUI(
@@ -593,14 +627,22 @@ export async function waitForComfyUIImages(
 ): Promise<string[]> {
   const deadline = Date.now() + settings.timeoutSeconds * 1000
   let descriptors: ComfyUIImageDescriptor[] | null = null
-  while (descriptors === null && Date.now() < deadline) {
+  // Poll once before checking the deadline on every iteration. If the WebView
+  // was suspended despite Android background protection, the first turn after
+  // resume can still collect a result completed while the screen was off.
+  while (descriptors === null) {
     if (signal?.aborted) throw signal.reason ?? new DOMException('Aborted', 'AbortError')
-    descriptors = historyImages(
-      await requestComfyUIJson(settings, `/history/${encodeURIComponent(promptId)}`, { signal }),
-      promptId,
-      settings.outputNodeId?.trim() || undefined
-    )
+    let historyPayload: unknown
+    try {
+      historyPayload = await requestComfyUIJson(settings, `/history/${encodeURIComponent(promptId)}`, { signal })
+    } catch (error) {
+      if (!isRetriableComfyUIRequest(error)) throw error
+    }
+    if (historyPayload !== undefined) {
+      descriptors = historyImages(historyPayload, promptId, settings.outputNodeId?.trim() || undefined)
+    }
     if (descriptors === null) {
+      if (Date.now() >= deadline) break
       const queue = asRecord(await requestComfyUIJson(settings, '/queue', { signal }).catch(() => undefined))
       const running = Array.isArray(queue?.queue_running) ? queue.queue_running : []
       const pending = Array.isArray(queue?.queue_pending) ? queue.queue_pending : []
@@ -622,7 +664,7 @@ export async function waitForComfyUIImages(
   if (descriptors === null) throw new Error(`ComfyUI timed out after ${settings.timeoutSeconds} seconds`)
   if (descriptors.length === 0) throw new Error('ComfyUI completed without returning an image')
   onProgress?.({ stage: 'downloading', percent: 90 })
-  return Promise.all(descriptors.map((image) => downloadImage(settings, image, signal)))
+  return Promise.all(descriptors.map((image) => downloadImageWithRetry(settings, image, signal)))
 }
 
 export async function cancelComfyUIJob(

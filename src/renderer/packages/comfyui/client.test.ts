@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Settings } from '@shared/types'
 import {
   buildComfyUIHeaders,
@@ -8,6 +8,7 @@ import {
   parseComfyUIWorkflow,
   uploadComfyUIImage,
   validateComfyUIModels,
+  waitForComfyUIImages,
 } from './client'
 
 const settings = {
@@ -29,6 +30,10 @@ const settings = {
   defaultNegativePrompt: 'blurry',
   workflowProfiles: [],
 } satisfies Settings['comfyui']
+
+beforeEach(() => {
+  vi.restoreAllMocks()
+})
 
 describe('ComfyUI client helpers', () => {
   it('creates Basic authentication headers without exposing credentials in the endpoint', () => {
@@ -193,5 +198,64 @@ describe('ComfyUI client helpers', () => {
     expect(request?.method).toBe('POST')
     expect(request?.headers).toMatchObject({ Authorization: 'Basic YXJ0aXN0OnNlY3JldA==' })
     expect(request?.body).toBeInstanceOf(FormData)
+  })
+
+  it('recovers from transient history and image-download failures after a background interruption', async () => {
+    const image = new Blob(['png-data'], { type: 'image/png' })
+    class TestFileReader {
+      result: string | ArrayBuffer | null = null
+      error: DOMException | null = null
+      onload: (() => void) | null = null
+      onerror: (() => void) | null = null
+
+      readAsDataURL() {
+        this.result = 'data:image/png;base64,cG5nLWRhdGE='
+        this.onload?.()
+      }
+    }
+    vi.stubGlobal('FileReader', TestFileReader)
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockRejectedValueOnce(new TypeError('temporary network loss'))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ queue_running: [], queue_pending: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            'prompt-1': {
+              outputs: { output: { images: [{ filename: 'result.png', type: 'output' }] } },
+            },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+      )
+      .mockRejectedValueOnce(new TypeError('download socket was suspended'))
+      .mockResolvedValueOnce(new Response(image, { status: 200, headers: { 'Content-Type': 'image/png' } }))
+
+    try {
+      await expect(
+        waitForComfyUIImages({ ...settings, timeoutSeconds: 2, pollIntervalMs: 1 }, 'prompt-1')
+      ).resolves.toEqual([expect.stringMatching(/^data:image\/png;base64,/)])
+      expect(fetchMock).toHaveBeenCalledTimes(5)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('does not hide a permanent ComfyUI authentication failure behind polling retries', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: 'unauthorized' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    )
+
+    await expect(waitForComfyUIImages({ ...settings, pollIntervalMs: 1 }, 'prompt-1')).rejects.toMatchObject({
+      status: 401,
+    })
   })
 })

@@ -17,6 +17,8 @@ const cancelComfyUIJobMock = vi.fn()
 const setCurrentGeneratingIdMock = vi.fn()
 const setCurrentRecordIdMock = vi.fn()
 const trackEventMock = vi.fn()
+const startBackgroundGenerationMock = vi.fn()
+const stopBackgroundGenerationMock = vi.fn()
 
 vi.mock('@/adapters', () => ({
   createModelDependencies: vi.fn(async () => ({
@@ -95,6 +97,11 @@ vi.mock('@/utils/track', () => ({
   trackEvent: trackEventMock,
 }))
 
+vi.mock('@/native/background-generation', () => ({
+  startBackgroundGeneration: startBackgroundGenerationMock,
+  stopBackgroundGeneration: stopBackgroundGenerationMock,
+}))
+
 vi.mock('@/lib/utils', () => ({
   getLogger: () => ({
     debug: vi.fn(),
@@ -146,6 +153,8 @@ describe('imageGenerationActions reference image payload', () => {
     getImageMock.mockResolvedValue('data:image/png;base64,AAAA')
     validateComfyUIModelsMock.mockResolvedValue([])
     cancelComfyUIJobMock.mockResolvedValue(undefined)
+    startBackgroundGenerationMock.mockResolvedValue(undefined)
+    stopBackgroundGenerationMock.mockResolvedValue(undefined)
     generateWithComfyUIMock.mockResolvedValue({
       promptId: 'comfy-prompt-1',
       images: ['data:image/png;base64,BBBB'],
@@ -275,6 +284,38 @@ describe('imageGenerationActions reference image payload', () => {
         })
       )
     })
+  })
+
+  it('keeps ComfyUI submission, polling, and download protected while Android is in the background', async () => {
+    const { startImageGeneration } = await import('./imageGenerationActions')
+
+    const handle = await startImageGeneration({
+      prompt: 'keep generating while the screen is off',
+      referenceImages: ['stored-reference'],
+      model: { provider: 'comfyui', modelId: '__workflow_default__' },
+      imageGenerateNum: 1,
+    })
+
+    await expect(handle.completion).resolves.toMatchObject({ id: 'record-1' })
+    expect(startBackgroundGenerationMock).toHaveBeenCalledWith('image-generation-record-1')
+    expect(stopBackgroundGenerationMock).toHaveBeenCalledWith('image-generation-record-1')
+    expect(startBackgroundGenerationMock.mock.invocationCallOrder[0]).toBeLessThan(
+      generateWithComfyUIMock.mock.invocationCallOrder[0]
+    )
+    expect(stopBackgroundGenerationMock.mock.invocationCallOrder[0]).toBeGreaterThan(
+      generateWithComfyUIMock.mock.invocationCallOrder[0]
+    )
+  })
+
+  it('keeps a retried image generation protected in the background', async () => {
+    const { retryGeneration } = await import('./imageGenerationActions')
+
+    await retryGeneration('record-1')
+    await vi.waitFor(() => expect(submitImageGenerationMock).toHaveBeenCalledOnce())
+    await vi.waitFor(() => expect(stopBackgroundGenerationMock).toHaveBeenCalledOnce())
+
+    expect(startBackgroundGenerationMock).toHaveBeenCalledWith('image-generation-record-1')
+    expect(stopBackgroundGenerationMock).toHaveBeenCalledWith('image-generation-record-1')
   })
 
   it('keeps a user cancellation terminal when ComfyUI reports an execution error concurrently', async () => {

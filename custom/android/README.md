@@ -34,7 +34,8 @@ The reproducible native overrides are kept here:
   `MainActivity.register-network-tools.smali` record the recovered-wrapper
   manifest and plugin-registration changes.
 - `BackgroundGenerationPlugin.java` and `BackgroundGenerationService.java`
-  keep a user-initiated model stream alive while Chatbox is backgrounded. The
+  keep user-initiated model streams and image-generation jobs alive while
+  Chatbox is backgrounded. The
   foreground service displays a private notification, holds a partial wake
   lock only while streams are active, keeps a five-second handoff window
   between agent/tool streams, and enforces a 30-minute hard stop.
@@ -51,8 +52,8 @@ The decoded build wrapper is intentionally kept outside this Git worktree at
 `../../../chatbox-v1.23.1-apk-build` so thousands of generated files are not mixed
 with the maintained TypeScript changes. The directory name is historical; its
 current renderer assets are built from v1.23.2. The current signed output is
-`../../../chatbox-1.23.2-custom-v503-signed.apk` (`versionName 1.23.2.503`,
-`versionCode 503`). v503 includes the earlier Settings Store crash fix plus
+`../../../chatbox-1.23.2-custom-v504-signed.apk` (`versionName 1.23.2.504`,
+`versionCode 504`). v504 includes the earlier Settings Store crash fix plus
 Android Skills/remote MCP, media and diagram rendering, offline KaTeX,
 session-attachment inline/retrieval selection, native embedding/reranking
 requests, cross-platform automatic attachment routing, and automatic title
@@ -68,12 +69,16 @@ runtime adds workflow-owned basic/advanced parameters, capability recommendation
 queue/progress/cancellation/recovery state, reproducible workflow/revision/
 parameter/seed metadata with setting reuse, bounded mobile image preprocessing,
 and Android SQLite persistence for ComfyUI metadata and terminal progress.
+All image providers now hold the Android background-generation service for the
+complete job lifetime. ComfyUI history polling retries transient screen-off
+network failures, performs a final history check after WebView resume, and
+retries the result download before marking the generation failed.
 Mobile attachment indexing
 additionally retries transient batch failures, saves completed batches as
 checkpoints, resumes from the first missing vector, and distinguishes indexing
 failures from parsing failures in the UI. See the local handoff outside the
 public repository and
-`../../test-evidence/mumu-v503/TEST_REPORT.md` before
+`../../test-evidence/mumu-v504/TEST_REPORT.md` before
 rebuilding.
 
 Security note: trusting a user-installed CA enables HTTPS to servers signed by
